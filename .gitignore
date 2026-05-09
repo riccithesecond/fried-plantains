@@ -1,0 +1,36 @@
+# Environment — never commit secrets
+.env
+
+# Storage — Parquet data stays local
+storage/
+*.parquet
+*.tmp
+
+# Python
+__pycache__/
+.venv/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# Node
+node_modules/
+frontend/dist/
+
+# Claude Code local settings
+.claude/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

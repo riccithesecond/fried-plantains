@@ -1,0 +1,40 @@
+id: FP-0005
+name: Brute force pattern - multiple failed logons followed by success
+description: >
+  Detects brute force attacks by identifying accounts with 5 or more failed logon
+  attempts within a 10-minute window followed by a successful logon. This pattern
+  indicates a credential stuffing or password spray attack that eventually succeeded,
+  which is the highest-risk credential threat scenario.
+severity: high
+language: kql
+query: |
+  let lookback = ago(1h);
+  let failedLogons = DeviceLogonEvents
+  | where Timestamp > lookback
+  | where ActionType == "LogonFailed"
+  | summarize FailCount = count(), LastFail = max(Timestamp) by AccountName, DeviceName;
+  let successLogons = DeviceLogonEvents
+  | where Timestamp > lookback
+  | where ActionType == "LogonSuccess";
+  failedLogons
+  | where FailCount >= 5
+  | join kind=inner successLogons on AccountName, DeviceName
+  | where Timestamp > LastFail
+  | project Timestamp, DeviceName, AccountName, FailCount, RemoteIP,
+            LogonType, LogonTypeName
+  | order by Timestamp desc
+tags:
+  - T1110
+  - T1078
+  - credential-access
+  - initial-access
+mde_portable: true
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  Users who mistype passwords frequently may trigger this. Service accounts with
+  rotating passwords during scheduled tasks are common FPs. Check if RemoteIP is
+  an internal system performing automated logons. The FailCount threshold (5) can
+  be tuned based on environment baselines.
