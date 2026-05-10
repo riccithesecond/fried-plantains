@@ -5,14 +5,16 @@ Auto-detection order: each parser's detect_source() is called in sequence;
 the first match wins. Defender (MDE native) is checked last since its detection
 heuristic is broad (any JSON with ReportId).
 
-Cloud parsers (CloudTrail, Cloudflare, Zscaler) return {"table", "data"} dicts
-or dicts keyed by table name. The ingest pipeline handles both formats.
+Cloud/email parsers (CloudTrail, Cloudflare, Zscaler, Proofpoint, Abnormal) return
+dicts keyed by table name. The ingest pipeline handles all return shapes.
 """
 
+from backend.parsers.abnormal import AbnormalParser
 from backend.parsers.base_parser import BaseParser
 from backend.parsers.cloudflare import CloudflareParser
 from backend.parsers.cloudtrail import CloudTrailParser
 from backend.parsers.defender import DefenderParser
+from backend.parsers.proofpoint import ProofpointParser
 from backend.parsers.syslog import SyslogParser
 from backend.parsers.windows_event import WindowsEventParser
 from backend.parsers.zscaler import ZscalerParser
@@ -23,6 +25,8 @@ PARSERS: list[type[BaseParser]] = [
     CloudTrailParser,
     CloudflareParser,
     ZscalerParser,
+    ProofpointParser,
+    AbnormalParser,
     SyslogParser,
     DefenderParser,  # Broad heuristic — must be last
 ]
@@ -31,13 +35,17 @@ PARSERS: list[type[BaseParser]] = [
 # an explicit source. Values are parser classes; the ingest layer handles the
 # different return shapes (list[{table,data}] vs dict[table, list]).
 SOURCE_TYPES: dict[str, type] = {
-    "cloudtrail": CloudTrailParser,
-    "cloudflare": CloudflareParser,
-    "zscaler_web": ZscalerParser,
-    "zscaler_dns": ZscalerParser,
-    "windows_event": WindowsEventParser,
-    "syslog": SyslogParser,
-    "defender": DefenderParser,
+    "cloudtrail":       CloudTrailParser,
+    "cloudflare":       CloudflareParser,
+    "zscaler_web":      ZscalerParser,
+    "zscaler_dns":      ZscalerParser,
+    "proofpoint_tap":   ProofpointParser,
+    "proofpoint_syslog": ProofpointParser,
+    "abnormal_threats": AbnormalParser,
+    "abnormal_cases":   AbnormalParser,
+    "windows_event":    WindowsEventParser,
+    "syslog":           SyslogParser,
+    "defender":         DefenderParser,
 }
 
 

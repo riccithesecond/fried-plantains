@@ -56,6 +56,10 @@ const KQL_TABLE_NAMES: readonly string[] = [
   "CloudflareDnsEvents",
   "ZscalerWebEvents",
   "ZscalerDnsEvents",
+  "ProofpointMessageEvents",
+  "ProofpointClickEvents",
+  "AbnormalThreatEvents",
+  "AbnormalCaseEvents",
 ];
 
 // Pipeline stage operators
@@ -263,6 +267,43 @@ const MDE_TABLE_COLUMNS: TMdeTableColumns = {
     "PolicyName", "DeviceName", "DeviceOwner", "DnsDurationMs",
     "DoHStatus", "AdditionalFields",
   ],
+  ProofpointMessageEvents: [
+    "Timestamp", "ReportId", "NetworkMessageId", "ActionType",
+    "SenderFromAddress", "SenderFromDomain", "SenderIP", "SenderReputation",
+    "RecipientEmailAddress", "RecipientEmailAddresses", "Subject", "MessageSize",
+    "SpamScore", "PhishScore", "ImpostorScore", "MalwareScore",
+    "SpamVerdict", "PhishVerdict", "MalwareVerdict", "BulkVerdict",
+    "DispositionAction", "QuarantineFolder", "QuarantineRule",
+    "PolicyRoutes", "ModulesRun", "ThreatsInfoMap",
+    "AttachmentCount", "AttachmentNames", "AttachmentTypes", "AttachmentSHA256",
+    "UrlCount", "HeaderFrom", "HeaderReplyTo", "XOriginatingIP",
+    "DKIM", "DMARC", "SPF", "AdditionalFields",
+  ],
+  ProofpointClickEvents: [
+    "Timestamp", "ReportId", "NetworkMessageId", "ActionType",
+    "RecipientEmailAddress", "SenderFromAddress", "SenderIP",
+    "Url", "UrlDomain", "ThreatURL", "ThreatStatus", "Classification",
+    "ThreatTime", "UserAgent", "ClickIP", "Blocked", "CampaignId",
+    "AdditionalFields",
+  ],
+  AbnormalThreatEvents: [
+    "Timestamp", "ReportId", "NetworkMessageId", "ActionType",
+    "AttackType", "AttackStrategy", "AttackVector", "ThreatStatus",
+    "AbNormalScore", "SenderFromAddress", "SenderFromDomain", "SenderDisplayName",
+    "SenderIP", "IsSenderKnown", "ReplyToAddress",
+    "RecipientEmailAddress", "RecipientName", "RecipientIsVIP",
+    "ImpersonatedParty", "ImpersonatedEmail", "Subject", "SubjectModified",
+    "SuspiciousContent", "RemediationStatus", "RemediationTimestamp",
+    "AttachmentCount", "AttachmentNames", "AttachmentSHA256",
+    "UrlCount", "SuspiciousUrls", "CampaignId", "AdditionalFields",
+  ],
+  AbnormalCaseEvents: [
+    "Timestamp", "ReportId", "ActionType", "CaseSeverity", "CaseStatus",
+    "CaseType", "ThreatCount", "AffectedEmployeeCount", "AffectedAccountCount",
+    "FirstObservedTimestamp", "LastObservedTimestamp",
+    "RemediationStatus", "RemediationTimestamp",
+    "AnalystAssigned", "ResolutionReason", "AdditionalFields",
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -405,7 +446,7 @@ function createKqlCompletionProvider(
 
       // Detect which table is in scope — offer its columns
       const tableMatch = textUntilCursor.match(
-        /\b(DeviceProcessEvents|DeviceNetworkEvents|DeviceFileEvents|DeviceRegistryEvents|DeviceLogonEvents|DeviceEvents|DeviceAlertEvents|IdentityLogonEvents|CloudAppEvents|AWSCloudTrailEvents|CloudflareHttpEvents|CloudflareFirewallEvents|CloudflareDnsEvents|ZscalerWebEvents|ZscalerDnsEvents)\b/
+        /\b(DeviceProcessEvents|DeviceNetworkEvents|DeviceFileEvents|DeviceRegistryEvents|DeviceLogonEvents|DeviceEvents|DeviceAlertEvents|IdentityLogonEvents|CloudAppEvents|AWSCloudTrailEvents|CloudflareHttpEvents|CloudflareFirewallEvents|CloudflareDnsEvents|ZscalerWebEvents|ZscalerDnsEvents|ProofpointMessageEvents|ProofpointClickEvents|AbnormalThreatEvents|AbnormalCaseEvents)\b/
       );
       if (tableMatch) {
         const tableName = tableMatch[1];

@@ -430,6 +430,138 @@ _ZSCALER_DNS_EVENTS = MdeTable(
     ),
 )
 
+_PROOFPOINT_MESSAGE_EVENTS = MdeTable(
+    name="ProofpointMessageEvents",
+    description="One row per email message processed by Proofpoint TAP — filtering verdict and threat intel",
+    columns=(
+        MdeColumn("Timestamp",              "TIMESTAMP", False, "Message processing timestamp (UTC)"),
+        MdeColumn("ReportId",               "STRING",    False, "Proofpoint GUID — unique per message event"),
+        MdeColumn("NetworkMessageId",       "STRING",    False, "RFC 2822 Message-ID stripped of angle brackets — join key with MDO tables"),
+        MdeColumn("ActionType",             "STRING",    False, "Delivered | Quarantined | Blocked | SpamFiltered | BulkFiltered | PhishFiltered | MalwareBlocked | ImpostorBlocked | SandboxBlocked"),
+        MdeColumn("SenderFromAddress",      "STRING",    False, "5321.MailFrom (envelope sender)"),
+        MdeColumn("SenderFromDomain",       "STRING",    False, "Domain part of envelope sender"),
+        MdeColumn("SenderIP",               "STRING",    False, "Sending MTA IP address"),
+        MdeColumn("SenderReputation",       "STRING",    False, "Proofpoint sender reputation: VeryMalicious | Malicious | Suspicious | Unknown | NeutralOrGood"),
+        MdeColumn("RecipientEmailAddress",  "STRING",    False, "Primary recipient (first in list)"),
+        MdeColumn("RecipientEmailAddresses","STRING[]",  False, "All envelope recipients"),
+        MdeColumn("Subject",                "STRING",    False, "Email subject line"),
+        MdeColumn("MessageSize",            "INT",       False, "Total message size in bytes"),
+        MdeColumn("SpamScore",              "FLOAT",     False, "Proofpoint spam score 0–100"),
+        MdeColumn("PhishScore",             "FLOAT",     False, "Proofpoint phish score 0–100"),
+        MdeColumn("ImpostorScore",          "FLOAT",     False, "Proofpoint impostor (BEC) score 0–100"),
+        MdeColumn("MalwareScore",           "FLOAT",     False, "Proofpoint malware score 0–100"),
+        MdeColumn("SpamVerdict",            "STRING",    False, "Positive | Negative | Neutral"),
+        MdeColumn("PhishVerdict",           "STRING",    False, "Positive | Negative | Neutral"),
+        MdeColumn("MalwareVerdict",         "STRING",    False, "Positive | Negative | Neutral"),
+        MdeColumn("BulkVerdict",            "STRING",    False, "Positive | Negative | Neutral"),
+        MdeColumn("DispositionAction",      "STRING",    False, "deliver | quarantine | discard"),
+        MdeColumn("QuarantineFolder",       "STRING",    True,  "Proofpoint quarantine folder name"),     # -- nullable
+        MdeColumn("QuarantineRule",         "STRING",    True,  "Quarantine rule that triggered"),        # -- nullable
+        MdeColumn("PolicyRoutes",           "STRING[]",  False, "Ordered list of Proofpoint policy routes applied"),
+        MdeColumn("ModulesRun",             "STRING[]",  False, "Detection modules that processed the message"),
+        MdeColumn("ThreatsInfoMap",         "JSON",      False, "Array of threat objects: sha256, md5, threatType, threatStatus, threatUrl"),
+        MdeColumn("AttachmentCount",        "INT",       False, "Number of attachments"),
+        MdeColumn("AttachmentNames",        "STRING[]",  True,  "Attachment filenames"),                  # -- nullable
+        MdeColumn("AttachmentTypes",        "STRING[]",  True,  "Attachment MIME types"),                 # -- nullable
+        MdeColumn("AttachmentSHA256",       "STRING[]",  True,  "SHA-256 hashes of attachments"),         # -- nullable
+        MdeColumn("UrlCount",               "INT",       False, "Number of URLs in message body"),
+        MdeColumn("HeaderFrom",             "STRING",    False, "5322.From display header"),
+        MdeColumn("HeaderReplyTo",          "STRING",    True,  "Reply-To header if present"),             # -- nullable
+        MdeColumn("XOriginatingIP",         "STRING",    True,  "X-Originating-IP header if present"),    # -- nullable
+        MdeColumn("DKIM",                   "STRING",    False, "pass | fail | none"),
+        MdeColumn("DMARC",                  "STRING",    False, "pass | fail | none"),
+        MdeColumn("SPF",                    "STRING",    False, "pass | fail | softfail | none"),
+        MdeColumn("AdditionalFields",       "JSON",      False, "Full raw Proofpoint TAP message event"),
+    ),
+)
+
+_PROOFPOINT_CLICK_EVENTS = MdeTable(
+    name="ProofpointClickEvents",
+    description="One row per URL click tracked by Proofpoint TAP URL Defense rewriting",
+    columns=(
+        MdeColumn("Timestamp",             "TIMESTAMP", False, "Click event timestamp (UTC)"),
+        MdeColumn("ReportId",              "STRING",    False, "Proofpoint click GUID"),
+        MdeColumn("NetworkMessageId",      "STRING",    False, "Message-ID of the email containing the clicked URL — join key"),
+        MdeColumn("ActionType",            "STRING",    False, "UrlClicked | UrlBlocked | UrlPermitted | SmartSearchBlock"),
+        MdeColumn("RecipientEmailAddress", "STRING",    False, "Recipient who clicked the URL"),
+        MdeColumn("SenderFromAddress",     "STRING",    False, "Sender of the email containing the URL"),
+        MdeColumn("SenderIP",              "STRING",    False, "Sending MTA IP"),
+        MdeColumn("Url",                   "STRING",    False, "Original URL (pre-rewrite)"),
+        MdeColumn("UrlDomain",             "STRING",    False, "Extracted domain from URL"),
+        MdeColumn("ThreatURL",             "STRING",    True,  "Proofpoint threat intelligence URL for this indicator"),  # -- nullable
+        MdeColumn("ThreatStatus",          "STRING",    False, "active | falsePositive | cleared"),
+        MdeColumn("Classification",        "STRING",    False, "phish | malware | spam | malware-sandbox | ransomware"),
+        MdeColumn("ThreatTime",            "TIMESTAMP", True,  "Time Proofpoint first observed this threat"),             # -- nullable
+        MdeColumn("UserAgent",             "STRING",    True,  "Browser User-Agent string at time of click"),             # -- nullable
+        MdeColumn("ClickIP",               "STRING",    False, "IP address from which the click originated"),
+        MdeColumn("Blocked",               "BOOLEAN",   False, "True if Proofpoint blocked the click"),
+        MdeColumn("CampaignId",            "STRING",    True,  "Proofpoint campaign identifier if clustered"),            # -- nullable
+        MdeColumn("AdditionalFields",      "JSON",      False, "Full raw Proofpoint TAP click event"),
+    ),
+)
+
+_ABNORMAL_THREAT_EVENTS = MdeTable(
+    name="AbnormalThreatEvents",
+    description="One row per threat detected by Abnormal Security AI email analysis",
+    columns=(
+        MdeColumn("Timestamp",             "TIMESTAMP", False, "Threat detection timestamp (UTC)"),
+        MdeColumn("ReportId",              "STRING",    False, "Abnormal threat ID"),
+        MdeColumn("NetworkMessageId",      "STRING",    True,  "RFC 2822 Message-ID if available — join key with Proofpoint and MDO tables"),  # -- nullable
+        MdeColumn("ActionType",            "STRING",    False, "ThreatDetected | ThreatRemediated | ThreatReleased | FalsePositive"),
+        MdeColumn("AttackType",            "STRING",    False, "BEC | Phishing | Malware | Spam | SocialEngineering | AccountTakeover | ReputationHijacking"),
+        MdeColumn("AttackStrategy",        "STRING",    False, "Proofpoint-style attack strategy label (e.g. NaivetyExploitation, ImpersonationOfKnownBrand)"),
+        MdeColumn("AttackVector",          "STRING",    False, "Email | Link | Attachment | SocialEngineering"),
+        MdeColumn("ThreatStatus",          "STRING",    False, "Active | Remediated | Released | FalsePositive"),
+        MdeColumn("AbNormalScore",         "FLOAT",     False, "Abnormal Security model confidence score 0.0–1.0"),
+        MdeColumn("SenderFromAddress",     "STRING",    False, "Envelope sender address"),
+        MdeColumn("SenderFromDomain",      "STRING",    False, "Domain part of sender"),
+        MdeColumn("SenderDisplayName",     "STRING",    False, "Display name shown in From header"),
+        MdeColumn("SenderIP",              "STRING",    True,  "Sending MTA IP if available"),                            # -- nullable
+        MdeColumn("IsSenderKnown",         "BOOLEAN",   False, "True if sender has prior legitimate correspondence"),
+        MdeColumn("ReplyToAddress",        "STRING",    True,  "Reply-To address if different from sender"),              # -- nullable
+        MdeColumn("RecipientEmailAddress", "STRING",    False, "Primary recipient email address"),
+        MdeColumn("RecipientName",         "STRING",    False, "Recipient display name"),
+        MdeColumn("RecipientIsVIP",        "BOOLEAN",   False, "True if recipient is marked as VIP in Abnormal"),
+        MdeColumn("ImpersonatedParty",     "STRING",    True,  "Entity being impersonated (e.g. Microsoft, CEO)"),        # -- nullable
+        MdeColumn("ImpersonatedEmail",     "STRING",    True,  "Email address being impersonated"),                       # -- nullable
+        MdeColumn("Subject",               "STRING",    False, "Email subject line"),
+        MdeColumn("SubjectModified",       "BOOLEAN",   False, "True if Abnormal modified the subject during remediation"),
+        MdeColumn("SuspiciousContent",     "STRING[]",  False, "List of suspicious content indicators identified"),
+        MdeColumn("RemediationStatus",     "STRING",    False, "Auto-remediated | ManualRemediation | Pending | NotRemediated"),
+        MdeColumn("RemediationTimestamp",  "TIMESTAMP", True,  "When remediation action was taken"),                      # -- nullable
+        MdeColumn("AttachmentCount",       "INT",       True,  "Number of attachments"),                                  # -- nullable
+        MdeColumn("AttachmentNames",       "STRING[]",  True,  "Attachment filenames"),                                   # -- nullable
+        MdeColumn("AttachmentSHA256",      "STRING[]",  True,  "SHA-256 hashes of attachments"),                          # -- nullable
+        MdeColumn("UrlCount",              "INT",       True,  "Number of URLs in message"),                              # -- nullable
+        MdeColumn("SuspiciousUrls",        "STRING[]",  True,  "URLs flagged as suspicious by Abnormal"),                 # -- nullable
+        MdeColumn("CampaignId",            "STRING",    True,  "Abnormal campaign identifier if clustered"),              # -- nullable
+        MdeColumn("AdditionalFields",      "JSON",      False, "Full raw Abnormal threat payload"),
+    ),
+)
+
+_ABNORMAL_CASE_EVENTS = MdeTable(
+    name="AbnormalCaseEvents",
+    description="One row per Abnormal Security case lifecycle event (case open, update, close)",
+    columns=(
+        MdeColumn("Timestamp",              "TIMESTAMP", False, "Case event timestamp (UTC)"),
+        MdeColumn("ReportId",               "STRING",    False, "Abnormal case ID"),
+        MdeColumn("ActionType",             "STRING",    False, "CaseOpened | CaseUpdated | CaseClosed | ThreatAdded | AnalystComment"),
+        MdeColumn("CaseSeverity",           "STRING",    False, "High | Medium | Low"),
+        MdeColumn("CaseStatus",             "STRING",    False, "New | Investigating | Closed"),
+        MdeColumn("CaseType",               "STRING",    False, "AccountTakeover | BEC | Phishing | Malware | Policy"),
+        MdeColumn("ThreatCount",            "INT",       False, "Number of threats included in the case"),
+        MdeColumn("AffectedEmployeeCount",  "INT",       False, "Number of employees affected by threats in this case"),
+        MdeColumn("AffectedAccountCount",   "INT",       False, "Number of distinct email accounts involved"),
+        MdeColumn("FirstObservedTimestamp", "TIMESTAMP", False, "Timestamp of the earliest threat in the case"),
+        MdeColumn("LastObservedTimestamp",  "TIMESTAMP", False, "Timestamp of the most recent threat in the case"),
+        MdeColumn("RemediationStatus",      "STRING",    False, "Auto-remediated | ManualRemediation | Pending | NotRemediated"),
+        MdeColumn("RemediationTimestamp",   "TIMESTAMP", True,  "When case remediation completed"),                       # -- nullable
+        MdeColumn("AnalystAssigned",        "STRING",    True,  "Email of analyst assigned to the case"),                 # -- nullable
+        MdeColumn("ResolutionReason",       "STRING",    True,  "Resolution notes or reason when case is closed"),        # -- nullable
+        MdeColumn("AdditionalFields",       "JSON",      False, "Full raw Abnormal case payload"),
+    ),
+)
+
 
 # ---------------------------------------------------------------------------
 # Registry — single source of truth for all table definitions
@@ -453,6 +585,10 @@ MDE_TABLES: dict[str, MdeTable] = {
         _CLOUDFLARE_DNS_EVENTS,
         _ZSCALER_WEB_EVENTS,
         _ZSCALER_DNS_EVENTS,
+        _PROOFPOINT_MESSAGE_EVENTS,
+        _PROOFPOINT_CLICK_EVENTS,
+        _ABNORMAL_THREAT_EVENTS,
+        _ABNORMAL_CASE_EVENTS,
     ]
 }
 
@@ -568,6 +704,36 @@ ACTION_TYPES: dict[str, list[str]] = {
         "DnsNXDomain",
         "DnsServFail",
         "DnsSinkhole",
+    ],
+    "ProofpointMessageEvents": [
+        "Delivered",
+        "Quarantined",
+        "Blocked",
+        "SpamFiltered",
+        "BulkFiltered",
+        "PhishFiltered",
+        "MalwareBlocked",
+        "ImpostorBlocked",
+        "SandboxBlocked",
+    ],
+    "ProofpointClickEvents": [
+        "UrlClicked",
+        "UrlBlocked",
+        "UrlPermitted",
+        "SmartSearchBlock",
+    ],
+    "AbnormalThreatEvents": [
+        "ThreatDetected",
+        "ThreatRemediated",
+        "ThreatReleased",
+        "FalsePositive",
+    ],
+    "AbnormalCaseEvents": [
+        "CaseOpened",
+        "CaseUpdated",
+        "CaseClosed",
+        "ThreatAdded",
+        "AnalystComment",
     ],
 }
 

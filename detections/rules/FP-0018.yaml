@@ -1,0 +1,28 @@
+id: FP-0018
+name: Proofpoint — malware attachment blocked by sandbox
+severity: critical
+language: kql
+mde_portable: false
+query: |
+  ProofpointMessageEvents
+  | where Timestamp > ago(1h)
+  | where ActionType in ("MalwareBlocked", "SandboxBlocked")
+  | where AttachmentCount > 0
+  | project Timestamp, SenderFromAddress, SenderFromDomain, SenderIP,
+            RecipientEmailAddress, Subject, AttachmentNames, AttachmentSHA256,
+            MalwareScore, MalwareVerdict, DispositionAction, NetworkMessageId
+  | order by MalwareScore desc
+tags:
+  - T1566.001
+  - T1059
+  - malware
+  - initial-access
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  Sandbox detonation is high fidelity — very low false positive rate. Cross-reference
+  AttachmentSHA256 with VirusTotal. Check if the same SHA256 appeared in other
+  messages to identify campaign scope. Pivot to DeviceFileEvents if the attachment
+  bypassed another gateway and landed on disk.

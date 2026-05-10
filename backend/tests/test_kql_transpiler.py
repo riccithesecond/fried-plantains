@@ -461,3 +461,121 @@ class TestCloudTableRecognition:
                 assert rule.get("mde_portable") is False, (
                     f"{rule['id']} queries a cloud/proxy table but mde_portable is not False"
                 )
+
+
+# ---------------------------------------------------------------------------
+# Email security table recognition tests
+# ---------------------------------------------------------------------------
+
+class TestEmailTableRecognition:
+    def test_proofpoint_message_events_recognized(self):
+        sql = transpile(
+            "ProofpointMessageEvents | where ActionType == 'PhishFiltered' "
+            "| project Timestamp, SenderFromAddress, RecipientEmailAddress, PhishScore"
+        )
+        assert "ProofpointMessageEvents" in sql
+
+    def test_proofpoint_message_events_phish_score_filter(self):
+        sql = transpile(
+            "ProofpointMessageEvents | where PhishScore > 90 | project Timestamp, Subject"
+        )
+        assert "PhishScore" in sql
+        assert "90" in sql
+
+    def test_proofpoint_click_events_recognized(self):
+        sql = transpile(
+            "ProofpointClickEvents | where Blocked == true | project Timestamp, Url, ClickIP"
+        )
+        assert "ProofpointClickEvents" in sql
+        assert "Blocked" in sql
+
+    def test_proofpoint_click_events_url_domain_filter(self):
+        sql = transpile(
+            "ProofpointClickEvents | where UrlDomain contains 'evil' "
+            "| project Timestamp, RecipientEmailAddress, Url, Classification"
+        )
+        assert "UrlDomain" in sql
+        assert "Classification" in sql
+
+    def test_abnormal_threat_events_recognized(self):
+        sql = transpile(
+            "AbnormalThreatEvents | where AttackType == 'BEC' "
+            "| project Timestamp, SenderFromAddress, RecipientEmailAddress, AbNormalScore"
+        )
+        assert "AbnormalThreatEvents" in sql
+        assert "AttackType" in sql
+
+    def test_abnormal_threat_events_score_filter(self):
+        sql = transpile(
+            "AbnormalThreatEvents | where AbNormalScore > 0.9 | project Timestamp, Subject"
+        )
+        assert "AbNormalScore" in sql
+
+    def test_abnormal_case_events_recognized(self):
+        sql = transpile(
+            "AbnormalCaseEvents | where CaseSeverity == 'High' "
+            "| project Timestamp, CaseType, ThreatCount, AffectedEmployeeCount"
+        )
+        assert "AbnormalCaseEvents" in sql
+        assert "CaseSeverity" in sql
+
+    def test_abnormal_case_events_threat_count_summarize(self):
+        sql = transpile(
+            "AbnormalCaseEvents | summarize TotalThreats=sum(ThreatCount) by CaseType"
+        )
+        assert "SUM" in sql.upper()
+        assert "GROUP BY" in sql.upper()
+
+    def test_email_rules_not_mde_portable(self):
+        import yaml
+        from pathlib import Path
+        email_tables = {
+            "ProofpointMessageEvents", "ProofpointClickEvents",
+            "AbnormalThreatEvents", "AbnormalCaseEvents",
+        }
+        for rule_path in Path("detections/rules").glob("FP-001[6-9].yaml"):
+            rule = yaml.safe_load(rule_path.read_text())
+            query = rule.get("query", "")
+            touches_email = any(t in query for t in email_tables)
+            if touches_email:
+                assert rule.get("mde_portable") is False, (
+                    f"{rule['id']} queries an email table but mde_portable is not False"
+                )
+
+    def test_fp_0021_cross_layer_join_transpiles(self):
+        """FP-0021 is a let + join on NetworkMessageId — verify the transpiler handles it."""
+        query = """
+        let ProofpointBlocked =
+            ProofpointMessageEvents
+            | where Timestamp > ago(24h)
+            | where ActionType in ("PhishFiltered", "Quarantined")
+            | project NetworkMessageId, PPTimestamp=Timestamp, SenderFromAddress;
+        AbnormalThreatEvents
+        | where Timestamp > ago(24h)
+        | where ActionType == "ThreatDetected"
+        | join kind=inner ProofpointBlocked on NetworkMessageId
+        | project PPTimestamp, Timestamp, NetworkMessageId, SenderFromAddress, AbNormalScore
+        """
+        sql = transpile(query)
+        # let clause must become a CTE
+        assert "WITH" in sql.upper() or "ProofpointBlocked" in sql
+        # Both table names must appear
+        assert "ProofpointMessageEvents" in sql
+        assert "AbnormalThreatEvents" in sql
+        # Join key preserved
+        assert "NetworkMessageId" in sql
+
+    def test_network_message_id_column_preserved_in_proofpoint(self):
+        """NetworkMessageId is the critical join key — must not be aliased or dropped."""
+        sql = transpile(
+            "ProofpointMessageEvents | where NetworkMessageId == 'msg-001@corp.com' "
+            "| project Timestamp, NetworkMessageId, ActionType"
+        )
+        assert "NetworkMessageId" in sql
+
+    def test_network_message_id_column_preserved_in_abnormal(self):
+        sql = transpile(
+            "AbnormalThreatEvents | where NetworkMessageId != '' "
+            "| project Timestamp, NetworkMessageId, AttackType"
+        )
+        assert "NetworkMessageId" in sql

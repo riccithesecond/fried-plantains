@@ -287,3 +287,272 @@ class TestZscalerParser:
         events = ZscalerParser.parse(raw)
         assert events[0]["table"] == "ZscalerDnsEvents"
         assert events[0]["data"]["ActionType"] == "DnsSinkhole"
+
+
+# ---------------------------------------------------------------------------
+# Proofpoint parser tests
+# ---------------------------------------------------------------------------
+
+from backend.parsers.proofpoint import ProofpointParser
+from backend.parsers.abnormal import AbnormalParser
+
+
+class TestProofpointParser:
+    def _tap_message(self, **overrides) -> dict:
+        base = {
+            "GUID": "pp-guid-001",
+            "messageID": "<test-msg-001@corp.com>",
+            "messageTime": "2024-01-15T09:23:11Z",
+            "recipient": ["jsmith@corp.com"],
+            "fromAddress": ["attacker@evil.com"],
+            "senderIP": "1.2.3.4",
+            "subject": "Urgent wire transfer request",
+            "messageSize": 4096,
+            "spamScore": 12,
+            "phishScore": 95,
+            "impostorScore": 88,
+            "malwareScore": 0,
+            "spamVerdict": "negative",
+            "phishVerdict": "positive",
+            "malwareVerdict": "negative",
+            "bulkVerdict": "negative",
+            "senderReputation": "veryMalicious",
+            "policyRoutes": ["phish_block"],
+            "modulesRun": ["pdr"],
+            "threatsInfoMap": [{"threatType": "phish", "threatStatus": "active",
+                                "sha256": "abc123", "threatUrl": "https://tp.proofpoint.com/v2/url?k=abc"}],
+            "messageParts": [],
+            "urlsInBody": [{"url": "http://evil.com/payload"}],
+            "spf": "fail",
+            "dkim": "fail",
+            "dmarc": "fail",
+        }
+        base.update(overrides)
+        return base
+
+    def test_tap_phish_blocked(self):
+        raw = _json.dumps({"messagesBlocked": [self._tap_message()]})
+        result = ProofpointParser.parse(raw)
+        assert "ProofpointMessageEvents" in result
+        evt = result["ProofpointMessageEvents"][0]
+        assert evt["ActionType"] == "PhishFiltered"
+        assert evt["PhishScore"] == 95.0
+        assert evt["SenderReputation"] == "VeryMalicious"
+
+    def test_tap_message_id_strips_angle_brackets(self):
+        raw = _json.dumps({"messagesBlocked": [self._tap_message()]})
+        result = ProofpointParser.parse(raw)
+        evt = result["ProofpointMessageEvents"][0]
+        assert evt["NetworkMessageId"] == "test-msg-001@corp.com"
+        assert "<" not in evt["NetworkMessageId"]
+        assert ">" not in evt["NetworkMessageId"]
+
+    def test_tap_delivered_impostor(self):
+        msg = self._tap_message(threatsInfoMap=[{"threatType": "impostor", "threatStatus": "active"}])
+        raw = _json.dumps({"messagesDelivered": [msg]})
+        result = ProofpointParser.parse(raw)
+        evt = result["ProofpointMessageEvents"][0]
+        assert evt["ActionType"] == "Delivered"
+
+    def test_tap_click_blocked(self):
+        click = {
+            "GUID": "click-001",
+            "messageID": "<test-msg-001@corp.com>",
+            "clickTime": "2024-01-15T09:25:00Z",
+            "recipient": "jsmith@corp.com",
+            "sender": "attacker@evil.com",
+            "senderIP": "1.2.3.4",
+            "url": "http://evil.com/payload",
+            "threatStatus": "active",
+            "classification": "phish",
+            "clickIP": "10.0.0.5",
+            "userAgent": "Mozilla/5.0",
+        }
+        raw = _json.dumps({"clicksBlocked": [click]})
+        result = ProofpointParser.parse(raw)
+        assert "ProofpointClickEvents" in result
+        evt = result["ProofpointClickEvents"][0]
+        assert evt["ActionType"] == "UrlBlocked"
+        assert evt["Blocked"] is True
+        assert evt["NetworkMessageId"] == "test-msg-001@corp.com"
+
+    def test_tap_click_permitted(self):
+        click = {
+            "GUID": "click-002",
+            "messageID": "benign-msg@corp.com",
+            "clickTime": "2024-01-15T10:00:00Z",
+            "recipient": "bob@corp.com",
+            "sender": "newsletter@vendor.com",
+            "senderIP": "5.6.7.8",
+            "url": "https://vendor.com/unsubscribe",
+            "threatStatus": "cleared",
+            "classification": "spam",
+            "clickIP": "10.0.0.10",
+        }
+        raw = _json.dumps({"clicksPermitted": [click]})
+        result = ProofpointParser.parse(raw)
+        evt = result["ProofpointClickEvents"][0]
+        assert evt["Blocked"] is False
+        assert evt["ActionType"] == "UrlPermitted"
+
+    def test_tap_report_id_from_guid(self):
+        raw = _json.dumps({"messagesDelivered": [self._tap_message(GUID="my-guid-xyz")]})
+        result = ProofpointParser.parse(raw)
+        evt = result["ProofpointMessageEvents"][0]
+        assert evt["ReportId"] == "my-guid-xyz"
+
+    def test_tap_both_table_keys_returned(self):
+        click = {
+            "GUID": "c", "messageID": "m@x.com", "clickTime": "2024-01-15T09:00:00Z",
+            "recipient": "a@b.com", "sender": "x@y.com", "senderIP": "1.1.1.1",
+            "url": "http://x.com", "threatStatus": "active", "classification": "phish",
+            "clickIP": "10.0.0.1",
+        }
+        raw = _json.dumps({
+            "messagesBlocked": [self._tap_message()],
+            "clicksBlocked": [click],
+        })
+        result = ProofpointParser.parse(raw)
+        assert "ProofpointMessageEvents" in result
+        assert "ProofpointClickEvents" in result
+
+    def test_cef_message_parsed(self):
+        cef = (
+            "CEF:0|Proofpoint|TAP|1.0|100|Message Blocked|5|"
+            "rt=2024-01-15T09:23:11Z suser=attacker@evil.com duser=jsmith@corp.com "
+            "src=1.2.3.4 msg=Urgent deviceExternalId=cef-msg-001 "
+            "cn1=10 cn2=90 cn3=0 spf=fail dkim=fail dmarc=fail"
+        )
+        result = ProofpointParser.parse(cef)
+        assert "ProofpointMessageEvents" in result
+        evt = result["ProofpointMessageEvents"][0]
+        assert evt["SenderFromAddress"] == "attacker@evil.com"
+        assert evt["PhishScore"] == 90.0
+
+    def test_detect_source_tap_json(self):
+        raw = _json.dumps({"messagesDelivered": [], "clicksBlocked": []})
+        assert ProofpointParser.detect_source(raw) is True
+
+    def test_detect_source_cef(self):
+        assert ProofpointParser.detect_source("CEF:0|Proofpoint|TAP|1.0|100|msg|5|ext=val") is True
+
+
+class TestAbnormalParser:
+    def _threat(self, **overrides) -> dict:
+        base = {
+            "threatId": "abn-threat-001",
+            "receivedTime": "2024-01-15T09:20:00Z",
+            "attackType": "Business Email Compromise",
+            "attackStrategy": "NaivetyExploitation",
+            "attackVector": "email",
+            "fromAddress": "ceo-fake@evil.com",
+            "fromName": "John Smith (CEO)",
+            "toAddress": "finance@corp.com",
+            "toName": "Finance Team",
+            "subject": "Urgent: Wire Transfer Approval",
+            "isRecipientVip": True,
+            "isSenderKnown": False,
+            "impersonatedParty": "CEO",
+            "abNormalScore": 0.98,
+            "threatStatus": "Active",
+            "remediationStatus": "Auto-Remediated",
+            "suspiciousContent": ["urgent language", "wire transfer request"],
+            "urls": [],
+            "attachments": [],
+        }
+        base.update(overrides)
+        return base
+
+    def test_threat_detected_bec(self):
+        raw = _json.dumps({"threats": [self._threat()]})
+        result = AbnormalParser.parse(raw)
+        assert "AbnormalThreatEvents" in result
+        evt = result["AbnormalThreatEvents"][0]
+        assert evt["ActionType"] == "ThreatDetected"
+        assert evt["AttackType"] == "BEC"
+        assert evt["RecipientIsVIP"] is True
+
+    def test_threat_abnormal_score(self):
+        raw = _json.dumps({"threats": [self._threat(abNormalScore=0.98)]})
+        result = AbnormalParser.parse(raw)
+        evt = result["AbnormalThreatEvents"][0]
+        assert evt["AbNormalScore"] == pytest.approx(0.98)
+
+    def test_threat_message_id_strips_angle_brackets(self):
+        raw = _json.dumps({"threats": [self._threat(internetMessageId="<msg@corp.com>")]})
+        result = AbnormalParser.parse(raw)
+        evt = result["AbnormalThreatEvents"][0]
+        assert evt["NetworkMessageId"] == "msg@corp.com"
+
+    def test_threat_no_message_id_is_none(self):
+        raw = _json.dumps({"threats": [self._threat()]})
+        result = AbnormalParser.parse(raw)
+        evt = result["AbnormalThreatEvents"][0]
+        assert evt["NetworkMessageId"] is None
+
+    def test_threat_remediated_action_type(self):
+        raw = _json.dumps({"threats": [self._threat(threatStatus="Remediated")]})
+        result = AbnormalParser.parse(raw)
+        evt = result["AbnormalThreatEvents"][0]
+        assert evt["ActionType"] == "ThreatRemediated"
+
+    def test_case_opened(self):
+        case = {
+            "caseId": "abn-case-001",
+            "createdAt": "2024-01-15T10:00:00Z",
+            "status": "New",
+            "severity": "High",
+            "caseType": "BEC",
+            "threatCount": 5,
+            "affectedEmployeeCount": 3,
+            "affectedAccountCount": 3,
+            "firstObservedTime": "2024-01-14T08:00:00Z",
+            "lastObservedTime": "2024-01-15T09:00:00Z",
+            "remediationStatus": "Auto-Remediated",
+        }
+        raw = _json.dumps({"cases": [case]})
+        result = AbnormalParser.parse(raw)
+        assert "AbnormalCaseEvents" in result
+        evt = result["AbnormalCaseEvents"][0]
+        assert evt["ActionType"] == "CaseOpened"
+        assert evt["CaseSeverity"] == "High"
+        assert evt["ThreatCount"] == 5
+
+    def test_case_closed_action_type(self):
+        case = {
+            "caseId": "abn-case-002",
+            "status": "Closed",
+            "severity": "Medium",
+            "caseType": "Phishing",
+            "threatCount": 2,
+            "affectedEmployeeCount": 1,
+            "affectedAccountCount": 1,
+            "firstObservedTime": "2024-01-14T08:00:00Z",
+            "lastObservedTime": "2024-01-15T09:00:00Z",
+            "remediationStatus": "manually_remediated",
+        }
+        raw = _json.dumps({"cases": [case]})
+        result = AbnormalParser.parse(raw)
+        evt = result["AbnormalCaseEvents"][0]
+        assert evt["ActionType"] == "CaseClosed"
+        assert evt["RemediationStatus"] == "ManualRemediation"
+
+    def test_webhook_threat_payload(self):
+        payload = self._threat()
+        payload["threatId"] = "webhook-threat-001"
+        raw = _json.dumps(payload)
+        result = AbnormalParser.parse(raw)
+        assert "AbnormalThreatEvents" in result
+        assert result["AbnormalThreatEvents"][0]["ReportId"] == "webhook-threat-001"
+
+    def test_detect_source_threats_api(self):
+        raw = _json.dumps({"threats": []})
+        assert AbnormalParser.detect_source(raw) is True
+
+    def test_detect_source_cases_api(self):
+        raw = _json.dumps({"cases": []})
+        assert AbnormalParser.detect_source(raw) is True
+
+    def test_detect_source_webhook(self):
+        raw = _json.dumps({"threatId": "abc", "receivedTime": "2024-01-15T09:00:00Z"})
+        assert AbnormalParser.detect_source(raw) is True
