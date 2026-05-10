@@ -401,3 +401,63 @@ class TestRenderOperator:
         )
         assert "COUNT(*)" in sql.upper()
         assert "GROUP BY" in sql.upper()
+
+
+class TestCloudTableRecognition:
+    """Verify the six new cloud/proxy tables are recognised by the transpiler."""
+
+    def test_aws_cloudtrail_table_recognized(self):
+        sql = transpile(
+            "AWSCloudTrailEvents | where UserIdentityType == 'Root' | project Timestamp, EventName"
+        )
+        assert "AWSCloudTrailEvents" in sql
+        assert "UserIdentityType" in sql
+
+    def test_cloudflare_http_table_recognized(self):
+        sql = transpile(
+            "CloudflareHttpEvents | where EdgeResponseStatus == 403 | project Timestamp, ClientIP"
+        )
+        assert "CloudflareHttpEvents" in sql
+
+    def test_cloudflare_firewall_table_recognized(self):
+        sql = transpile(
+            "CloudflareFirewallEvents | where ActionType == 'WAFBlock' | project Timestamp, ClientIP, FirewallRuleID"
+        )
+        assert "CloudflareFirewallEvents" in sql
+        assert "FirewallRuleID" in sql
+
+    def test_cloudflare_dns_table_recognized(self):
+        sql = transpile(
+            "CloudflareDnsEvents | where Blocked == true | project Timestamp, QueryName, ThreatCategory"
+        )
+        assert "CloudflareDnsEvents" in sql
+
+    def test_zscaler_web_summarize(self):
+        sql = transpile(
+            "ZscalerWebEvents | where ActionType == 'MalwareDetected' | summarize count() by UserName"
+        )
+        assert "ZscalerWebEvents" in sql
+        assert "COUNT" in sql.upper()
+        assert "GROUP BY" in sql.upper()
+
+    def test_zscaler_dns_table_recognized(self):
+        sql = transpile(
+            "ZscalerDnsEvents | where ActionType == 'DnsSinkhole' | project Timestamp, UserName, QueryName"
+        )
+        assert "ZscalerDnsEvents" in sql
+
+    def test_cloud_rules_not_mde_portable(self):
+        import yaml
+        from pathlib import Path
+        cloud_tables = {
+            "AWSCloudTrailEvents", "CloudflareHttpEvents", "CloudflareFirewallEvents",
+            "CloudflareDnsEvents", "ZscalerWebEvents", "ZscalerDnsEvents",
+        }
+        for rule_path in Path("detections/rules").glob("*.yaml"):
+            rule = yaml.safe_load(rule_path.read_text())
+            query = rule.get("query", "")
+            touches_cloud = any(t in query for t in cloud_tables)
+            if touches_cloud:
+                assert rule.get("mde_portable") is False, (
+                    f"{rule['id']} queries a cloud/proxy table but mde_portable is not False"
+                )

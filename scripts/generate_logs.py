@@ -188,6 +188,219 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
             },
         ],
     },
+    # ------------------------------------------------------------------
+    # AWS CloudTrail scenarios
+    # ------------------------------------------------------------------
+    "aws-root-usage": {
+        "table": "AWSCloudTrailEvents",
+        "mitre": ["T1078.004"],
+        "detection_rules": ["FP-0008"],
+        "events": [
+            {
+                "ActionType": "AuthAttempt",
+                "UserIdentityType": "Root",
+                "UserIdentityArn": "arn:aws:iam::123456789012:root",
+                "UserIdentityName": "root",
+                "EventSource": "signin.amazonaws.com",
+                "EventName": "ConsoleLogin",
+                "EventCategory": "Management",
+                "AWSRegion": "us-east-1",
+                "SourceIPAddress": "203.0.113.50",
+                "UserAgent": "Mozilla/5.0",
+                "ReadOnly": False,
+                "MFAAuthenticated": False,
+            },
+            {
+                "ActionType": "ManagementRead",
+                "UserIdentityType": "Root",
+                "UserIdentityArn": "arn:aws:iam::123456789012:root",
+                "UserIdentityName": "root",
+                "EventSource": "iam.amazonaws.com",
+                "EventName": "ListUsers",
+                "EventCategory": "Management",
+                "AWSRegion": "us-east-1",
+                "SourceIPAddress": "203.0.113.50",
+                "UserAgent": "aws-cli/2.13.0",
+                "ReadOnly": True,
+                "MFAAuthenticated": False,
+            },
+        ],
+    },
+    "aws-cloudtrail-disable": {
+        "table": "AWSCloudTrailEvents",
+        "mitre": ["T1562.008"],
+        "detection_rules": ["FP-0009"],
+        "events": [
+            {
+                "ActionType": "ConfigChange",
+                "UserIdentityType": "IAMUser",
+                "UserIdentityName": "attacker",
+                "EventSource": "cloudtrail.amazonaws.com",
+                "EventName": "StopLogging",
+                "EventCategory": "Management",
+                "AWSRegion": "us-east-1",
+                "SourceIPAddress": "198.51.100.10",
+                "UserAgent": "aws-cli/2.13.0",
+                "ReadOnly": False,
+                "MFAAuthenticated": False,
+            },
+            {
+                "ActionType": "ConfigChange",
+                "UserIdentityType": "IAMUser",
+                "UserIdentityName": "attacker",
+                "EventSource": "cloudtrail.amazonaws.com",
+                "EventName": "DeleteTrail",
+                "EventCategory": "Management",
+                "AWSRegion": "us-east-1",
+                "SourceIPAddress": "198.51.100.10",
+                "UserAgent": "aws-cli/2.13.0",
+                "ReadOnly": False,
+                "MFAAuthenticated": False,
+            },
+        ],
+    },
+    "aws-iam-escalation": {
+        "table": "AWSCloudTrailEvents",
+        "mitre": ["T1098", "T1136.003"],
+        "detection_rules": ["FP-0010"],
+        "events": [
+            {
+                "ActionType": "ManagementWrite",
+                "UserIdentityType": "IAMUser",
+                "UserIdentityName": "attacker",
+                "EventSource": "iam.amazonaws.com",
+                "EventName": "CreateUser",
+                "EventCategory": "Management",
+                "AWSRegion": "us-east-1",
+                "SourceIPAddress": "198.51.100.10",
+                "UserAgent": "python-boto3/1.28.0",
+                "RequestParameters": {"userName": "backdoor-svc"},
+                "ReadOnly": False,
+                "MFAAuthenticated": False,
+            },
+            {
+                "ActionType": "ManagementWrite",
+                "UserIdentityType": "IAMUser",
+                "UserIdentityName": "attacker",
+                "EventSource": "iam.amazonaws.com",
+                "EventName": "AttachUserPolicy",
+                "EventCategory": "Management",
+                "AWSRegion": "us-east-1",
+                "SourceIPAddress": "198.51.100.10",
+                "UserAgent": "python-boto3/1.28.0",
+                "RequestParameters": {
+                    "userName": "backdoor-svc",
+                    "policyArn": "arn:aws:iam::aws:policy/AdministratorAccess",
+                },
+                "ReadOnly": False,
+                "MFAAuthenticated": False,
+            },
+        ],
+    },
+    # ------------------------------------------------------------------
+    # Cloudflare scenarios
+    # ------------------------------------------------------------------
+    "cloudflare-waf-spike": {
+        "table": "CloudflareFirewallEvents",
+        "mitre": ["T1190"],
+        "detection_rules": ["FP-0011"],
+        "events": [
+            {
+                "ActionType": "WAFBlock",
+                "ClientIP": "203.0.113.99",
+                "ClientCountry": "RU",
+                "FirewallAction": "block",
+                "FirewallRuleID": "waf-sqli-001",
+                "FirewallRuleDescription": "SQLi attempt",
+                "FirewallSource": "waf",
+                "ClientRequestURI": f"/api/users?id=1' OR '1'='1",
+                "ClientRequestMethod": "GET",
+            }
+            for _ in range(25)
+        ],
+    },
+    "cloudflare-dns-threat": {
+        "table": "CloudflareDnsEvents",
+        "mitre": ["T1071.004"],
+        "detection_rules": ["FP-0012"],
+        "events": [
+            {
+                "ActionType": "DnsThreatMatch",
+                "SourceIP": "10.0.0.42",
+                "QueryName": "c2.evilcorp.ru",
+                "QueryType": "A",
+                "ResponseCode": "NOERROR",
+                "ThreatCategory": "Command and Control",
+                "ThreatIndicator": "c2.evilcorp.ru",
+                "Blocked": True,
+            },
+        ],
+    },
+    # ------------------------------------------------------------------
+    # Zscaler scenarios
+    # ------------------------------------------------------------------
+    "zscaler-malware-download": {
+        "table": "ZscalerWebEvents",
+        "mitre": ["T1105"],
+        "detection_rules": ["FP-0013"],
+        "events": [
+            {
+                "ActionType": "MalwareDetected",
+                "UserName": "jsmith@corp.com",
+                "Department": "Finance",
+                "ClientIP": "10.0.0.55",
+                "RequestURL": "http://malware-host.ru/payload.exe",
+                "RequestHost": "malware-host.ru",
+                "Protocol": "HTTP",
+                "RequestMethod": "GET",
+                "FileName": "payload.exe",
+                "MalwareName": "Emotet.Gen",
+                "MalwareClass": "Trojan",
+                "FileSHA256": "a" * 64,
+                "ResponseCode": 200,
+                "SSLDecrypted": False,
+            },
+        ],
+    },
+    "zscaler-dlp": {
+        "table": "ZscalerWebEvents",
+        "mitre": ["T1048"],
+        "detection_rules": ["FP-0014"],
+        "events": [
+            {
+                "ActionType": "DlpViolation",
+                "UserName": "insider@corp.com",
+                "Department": "Engineering",
+                "ClientIP": "10.0.0.77",
+                "RequestURL": "https://drive.google.com/upload/d/largefile",
+                "RequestHost": "drive.google.com",
+                "Protocol": "HTTPS",
+                "RequestMethod": "POST",
+                "ResponseCode": 200,
+                "BytesOut": 50_000_000,
+                "PolicyName": "DLP-Sensitive-Data",
+                "SSLDecrypted": True,
+            },
+        ] * 5,  # 5 violations to trigger threshold
+    },
+    "zscaler-dns-sinkhole": {
+        "table": "ZscalerDnsEvents",
+        "mitre": ["T1071.004"],
+        "detection_rules": ["FP-0015"],
+        "events": [
+            {
+                "ActionType": "DnsSinkhole",
+                "UserName": "victim@corp.com",
+                "ClientIP": "10.0.0.99",
+                "QueryName": "beacon.apt29.io",
+                "QueryType": "A",
+                "ResponseCode": "NOERROR",
+                "ThreatName": "APT29-Beacon",
+                "ThreatCategory": "APT",
+                "PolicyName": "Sinkhole-Threat-Intel",
+            },
+        ],
+    },
 }
 
 
@@ -300,11 +513,222 @@ def _generate_benign_registry_event(
     }
 
 
+_AWS_ACCOUNTS = ["123456789012", "234567890123", "345678901234"]
+_AWS_REGIONS = ["us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1"]
+_AWS_SERVICES = [
+    "s3.amazonaws.com", "ec2.amazonaws.com", "iam.amazonaws.com",
+    "rds.amazonaws.com", "lambda.amazonaws.com", "cloudwatch.amazonaws.com",
+]
+_AWS_READ_OPS = [
+    ("DescribeInstances", "ec2.amazonaws.com"),
+    ("ListBuckets", "s3.amazonaws.com"),
+    ("GetObject", "s3.amazonaws.com"),
+    ("DescribeDBInstances", "rds.amazonaws.com"),
+    ("ListFunctions", "lambda.amazonaws.com"),
+    ("GetMetricStatistics", "cloudwatch.amazonaws.com"),
+    ("ListUsers", "iam.amazonaws.com"),
+    ("GetCallerIdentity", "sts.amazonaws.com"),
+]
+_CF_DOMAINS = ["api.corp.com", "www.corp.com", "cdn.corp.com", "app.corp.com"]
+_CF_PATHS = ["/", "/api/v1/users", "/api/v1/products", "/static/main.js", "/favicon.ico"]
+_ZS_USERS = ["alice@corp.com", "bob@corp.com", "charlie@corp.com", "diana@corp.com"]
+_ZS_URLS = [
+    ("https://www.google.com", "google.com"),
+    ("https://microsoft.com/updates", "microsoft.com"),
+    ("https://github.com/repos", "github.com"),
+    ("https://slack.com/api/rtm", "slack.com"),
+    ("https://www.linkedin.com/feed", "linkedin.com"),
+]
+_ZS_DNS_DOMAINS = [
+    "www.google.com", "microsoft.com", "github.com",
+    "slack.com", "teams.microsoft.com", "outlook.office365.com",
+]
+
+
+def _generate_benign_cloudtrail_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    event_name, event_source = rng.choice(_AWS_READ_OPS)
+    account_id = rng.choice(_AWS_ACCOUNTS)
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "ActionType": "ManagementRead" if not event_source == "s3.amazonaws.com" else "DataAccess",
+        "AccountId": account_id,
+        "AccountName": None,
+        "UserIdentityType": "IAMUser",
+        "UserIdentityArn": f"arn:aws:iam::{account_id}:user/{user}",
+        "UserIdentityName": user,
+        "SessionName": None,
+        "EventSource": event_source,
+        "EventName": event_name,
+        "EventCategory": "Management",
+        "AWSRegion": rng.choice(_AWS_REGIONS),
+        "SourceIPAddress": f"10.{rng.randint(0,255)}.{rng.randint(0,255)}.{rng.randint(1,254)}",
+        "UserAgent": rng.choice(["aws-cli/2.13.0", "python-boto3/1.28.0", "Terraform/1.5.0"]),
+        "RequestParameters": None,
+        "ResponseElements": None,
+        "ErrorCode": None,
+        "ErrorMessage": None,
+        "ReadOnly": True,
+        "MFAAuthenticated": True,
+        "SharedEventID": None,
+        "AdditionalFields": {},
+    }
+
+
+def _generate_benign_cloudflare_http_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    return {
+        "Timestamp": ts,
+        "ReportId": f"cf{rng.randint(100000000, 999999999):x}",
+        "ActionType": "HttpRequest",
+        "ClientIP": f"203.{rng.randint(0,255)}.{rng.randint(0,255)}.{rng.randint(1,254)}",
+        "ClientPort": rng.randint(1024, 65535),
+        "ClientCountry": rng.choice(["US", "GB", "DE", "CA", "AU"]),
+        "ClientASN": rng.randint(1000, 65000),
+        "ClientASNDescription": "CORP-ISP",
+        "ClientRequestMethod": rng.choice(["GET", "GET", "GET", "POST"]),
+        "ClientRequestHost": rng.choice(_CF_DOMAINS),
+        "ClientRequestURI": rng.choice(_CF_PATHS),
+        "ClientRequestUserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120",
+        "ClientRequestReferer": None,
+        "ClientRequestBytes": rng.randint(200, 2000),
+        "ClientSSLProtocol": "TLSv1.3",
+        "ClientSSLCipher": "AEAD-AES256-GCM-SHA384",
+        "EdgeResponseStatus": rng.choice([200, 200, 200, 304, 301]),
+        "EdgeResponseBytes": rng.randint(1000, 50000),
+        "EdgeColoCode": rng.choice(["DFW", "LHR", "SIN", "FRA"]),
+        "EdgeServerIP": None,
+        "OriginIP": "192.0.2.10",
+        "OriginResponseStatus": 200,
+        "OriginResponseTime": rng.randint(1000000, 50000000),
+        "CacheCacheStatus": rng.choice(["HIT", "HIT", "MISS", "EXPIRED"]),
+        "CacheTieredFill": False,
+        "FirewallMatchesActions": None,
+        "FirewallMatchesRuleIDs": None,
+        "BotScore": rng.randint(1, 20),
+        "BotScoreSrc": "Verified Bot",
+        "ThreatScore": 0,
+        "WorkerSubrequest": False,
+        "ZoneName": rng.choice(_CF_DOMAINS),
+        "AdditionalFields": {},
+    }
+
+
+def _generate_benign_cloudflare_dns_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "ActionType": "DnsQuery",
+        "SourceIP": f"10.{rng.randint(0,10)}.{rng.randint(0,255)}.{rng.randint(1,254)}",
+        "SourcePort": rng.randint(1024, 65535),
+        "DeviceID": str(uuid.uuid4()),
+        "DeviceName": None,
+        "UserID": None,
+        "AccountName": None,
+        "QueryName": rng.choice(_ZS_DNS_DOMAINS),
+        "QueryType": rng.choice(["A", "A", "A", "AAAA", "MX"]),
+        "QueryTypeName": None,
+        "ResponseCode": "NOERROR",
+        "ResolvedIPs": [f"142.{rng.randint(0,255)}.{rng.randint(0,255)}.{rng.randint(1,254)}"],
+        "ResolverDecision": "ALLOW",
+        "ThreatCategory": None,
+        "ThreatIndicator": None,
+        "PolicyName": None,
+        "PolicyID": None,
+        "Blocked": False,
+        "ResponseDurationMs": rng.randint(1, 30),
+        "ZoneName": None,
+        "Location": "HQ",
+        "AdditionalFields": {},
+    }
+
+
+def _generate_benign_zscaler_web_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    url, host = rng.choice(_ZS_URLS)
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "ActionType": "WebAllow",
+        "UserName": rng.choice(_ZS_USERS),
+        "Department": rng.choice(["Engineering", "Finance", "HR", "Sales"]),
+        "Location": rng.choice(["HQ", "Branch-London", "Remote-VPN"]),
+        "ClientIP": f"10.{rng.randint(0,10)}.{rng.randint(0,255)}.{rng.randint(1,254)}",
+        "Protocol": "HTTPS",
+        "RequestMethod": "GET",
+        "RequestURL": url,
+        "RequestHost": host,
+        "RequestSize": rng.randint(200, 2000),
+        "ResponseCode": 200,
+        "ResponseSize": rng.randint(5000, 500000),
+        "ResponseTime": rng.randint(50, 800),
+        "ContentType": "text/html",
+        "FileType": None,
+        "FileName": None,
+        "FileSHA256": None,
+        "MalwareClass": None,
+        "MalwareName": None,
+        "ThreatCategory": None,
+        "PolicyName": "Allow-Business",
+        "RuleLabel": "allow-saas",
+        "URLCategory": rng.choice(["Business and Economy", "Technology", "Social Networking"]),
+        "CloudApplicationName": rng.choice(["Microsoft 365", "Google Workspace", "Slack"]),
+        "CloudApplicationRisk": "Low",
+        "SSLDecrypted": True,
+        "DeviceOwner": "Managed",
+        "DeviceName": device,
+        "ServerIP": f"142.{rng.randint(0,255)}.{rng.randint(0,255)}.{rng.randint(1,254)}",
+        "ServerPort": 443,
+        "BytesIn": rng.randint(5000, 500000),
+        "BytesOut": rng.randint(200, 5000),
+        "DurationMs": rng.randint(50, 800),
+        "AdditionalFields": {},
+    }
+
+
+def _generate_benign_zscaler_dns_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "ActionType": "DnsAllow",
+        "UserName": rng.choice(_ZS_USERS),
+        "Department": rng.choice(["Engineering", "Finance", "HR"]),
+        "Location": "HQ",
+        "ClientIP": f"10.{rng.randint(0,10)}.{rng.randint(0,255)}.{rng.randint(1,254)}",
+        "QueryName": rng.choice(_ZS_DNS_DOMAINS),
+        "QueryType": rng.choice(["A", "A", "AAAA"]),
+        "ResponseCode": "NOERROR",
+        "ResolvedIPs": [f"20.{rng.randint(0,255)}.{rng.randint(0,255)}.{rng.randint(1,254)}"],
+        "CategoryName": "Technology",
+        "ThreatName": None,
+        "ThreatCategory": None,
+        "PolicyName": None,
+        "DeviceName": device,
+        "DeviceOwner": "Managed",
+        "DnsDurationMs": rng.randint(1, 20),
+        "DoHStatus": False,
+        "AdditionalFields": {},
+    }
+
+
 _BENIGN_GENERATORS = {
     "DeviceProcessEvents": _generate_benign_process_event,
     "DeviceNetworkEvents": _generate_benign_network_event,
     "DeviceLogonEvents": _generate_benign_logon_event,
     "DeviceRegistryEvents": _generate_benign_registry_event,
+    "AWSCloudTrailEvents": _generate_benign_cloudtrail_event,
+    "CloudflareHttpEvents": _generate_benign_cloudflare_http_event,
+    "CloudflareDnsEvents": _generate_benign_cloudflare_dns_event,
+    "ZscalerWebEvents": _generate_benign_zscaler_web_event,
+    "ZscalerDnsEvents": _generate_benign_zscaler_dns_event,
 }
 
 
@@ -427,7 +851,8 @@ def main():
     parser.add_argument("--table", required=True, help="Target MDE table name")
     parser.add_argument("--events", type=int, default=1000, help="Total event count")
     parser.add_argument("--attack-ratio", type=float, default=0.05, help="Fraction of malicious events")
-    parser.add_argument("--scenario", default=None, choices=list(_ATTACK_SCENARIOS.keys()))
+    parser.add_argument("--scenario", default=None, choices=list(_ATTACK_SCENARIOS.keys()),
+                        metavar="SCENARIO", help=f"Attack scenario: {', '.join(_ATTACK_SCENARIOS)}")
     parser.add_argument("--output", default="./generated", help="Output directory")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     args = parser.parse_args()

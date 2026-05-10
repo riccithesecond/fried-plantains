@@ -50,6 +50,12 @@ const KQL_TABLE_NAMES: readonly string[] = [
   "DeviceAlertEvents",
   "IdentityLogonEvents",
   "CloudAppEvents",
+  "AWSCloudTrailEvents",
+  "CloudflareHttpEvents",
+  "CloudflareFirewallEvents",
+  "CloudflareDnsEvents",
+  "ZscalerWebEvents",
+  "ZscalerDnsEvents",
 ];
 
 // Pipeline stage operators
@@ -204,6 +210,59 @@ const MDE_TABLE_COLUMNS: TMdeTableColumns = {
     "CountryCode", "City", "ISP", "DeviceType", "OSPlatform",
     "AdditionalFields", "ReportId",
   ],
+  AWSCloudTrailEvents: [
+    "Timestamp", "ReportId", "ActionType", "AccountId", "AccountName",
+    "UserIdentityType", "UserIdentityArn", "UserIdentityName", "SessionName",
+    "EventSource", "EventName", "EventCategory", "AWSRegion",
+    "SourceIPAddress", "UserAgent", "RequestParameters", "ResponseElements",
+    "ErrorCode", "ErrorMessage", "ReadOnly", "MFAAuthenticated",
+    "SharedEventID", "AdditionalFields",
+  ],
+  CloudflareHttpEvents: [
+    "Timestamp", "ReportId", "ActionType", "ClientIP", "ClientPort",
+    "ClientCountry", "ClientASN", "ClientASNDescription",
+    "ClientRequestMethod", "ClientRequestHost", "ClientRequestURI",
+    "ClientRequestUserAgent", "ClientRequestReferer", "ClientRequestBytes",
+    "ClientSSLProtocol", "ClientSSLCipher", "EdgeResponseStatus",
+    "EdgeResponseBytes", "EdgeColoCode", "EdgeServerIP", "OriginIP",
+    "OriginResponseStatus", "OriginResponseTime", "CacheCacheStatus",
+    "CacheTieredFill", "FirewallMatchesActions", "FirewallMatchesRuleIDs",
+    "BotScore", "BotScoreSrc", "ThreatScore", "WorkerSubrequest",
+    "ZoneName", "AdditionalFields",
+  ],
+  CloudflareFirewallEvents: [
+    "Timestamp", "ReportId", "ActionType", "ClientIP", "ClientCountry",
+    "ClientASN", "ClientRequestMethod", "ClientRequestHost",
+    "ClientRequestURI", "ClientRequestUserAgent", "EdgeColoCode",
+    "FirewallAction", "FirewallRuleID", "FirewallRuleDescription",
+    "FirewallSource", "MatchIndex", "Metadata", "OriginResponseStatus",
+    "SampledRate", "ZoneName", "AdditionalFields",
+  ],
+  CloudflareDnsEvents: [
+    "Timestamp", "ReportId", "ActionType", "SourceIP", "SourcePort",
+    "DeviceID", "DeviceName", "UserID", "AccountName", "QueryName",
+    "QueryType", "QueryTypeName", "ResponseCode", "ResolvedIPs",
+    "ResolverDecision", "ThreatCategory", "ThreatIndicator", "PolicyName",
+    "PolicyID", "Blocked", "ResponseDurationMs", "ZoneName", "Location",
+    "AdditionalFields",
+  ],
+  ZscalerWebEvents: [
+    "Timestamp", "ReportId", "ActionType", "UserName", "Department",
+    "Location", "ClientIP", "Protocol", "RequestMethod", "RequestURL",
+    "RequestHost", "RequestSize", "ResponseCode", "ResponseSize",
+    "ResponseTime", "ContentType", "FileType", "FileName", "FileSHA256",
+    "MalwareClass", "MalwareName", "ThreatCategory", "PolicyName",
+    "RuleLabel", "URLCategory", "CloudApplicationName", "CloudApplicationRisk",
+    "SSLDecrypted", "DeviceOwner", "DeviceName", "ServerIP", "ServerPort",
+    "BytesIn", "BytesOut", "DurationMs", "AdditionalFields",
+  ],
+  ZscalerDnsEvents: [
+    "Timestamp", "ReportId", "ActionType", "UserName", "Department",
+    "Location", "ClientIP", "QueryName", "QueryType", "ResponseCode",
+    "ResolvedIPs", "CategoryName", "ThreatName", "ThreatCategory",
+    "PolicyName", "DeviceName", "DeviceOwner", "DnsDurationMs",
+    "DoHStatus", "AdditionalFields",
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -346,7 +405,7 @@ function createKqlCompletionProvider(
 
       // Detect which table is in scope — offer its columns
       const tableMatch = textUntilCursor.match(
-        /\b(DeviceProcessEvents|DeviceNetworkEvents|DeviceFileEvents|DeviceRegistryEvents|DeviceLogonEvents|DeviceEvents|DeviceAlertEvents|IdentityLogonEvents|CloudAppEvents)\b/
+        /\b(DeviceProcessEvents|DeviceNetworkEvents|DeviceFileEvents|DeviceRegistryEvents|DeviceLogonEvents|DeviceEvents|DeviceAlertEvents|IdentityLogonEvents|CloudAppEvents|AWSCloudTrailEvents|CloudflareHttpEvents|CloudflareFirewallEvents|CloudflareDnsEvents|ZscalerWebEvents|ZscalerDnsEvents)\b/
       );
       if (tableMatch) {
         const tableName = tableMatch[1];
