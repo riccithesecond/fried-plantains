@@ -133,31 +133,35 @@ def _coerce_types(event: dict[str, Any], table: MdeTable) -> dict[str, Any]:
     return event
 
 
-def _to_timestamp(value: Any) -> str:
-    """Coerce a value to an ISO 8601 UTC timestamp string."""
+def _to_timestamp(value: Any) -> datetime:
+    """Coerce a value to a UTC-naive datetime.
+
+    Returning a naive datetime (not a string) ensures pyarrow writes the column
+    as TIMESTAMP rather than VARCHAR, so DuckDB temporal comparisons work.
+    Timezone-naive UTC avoids a pytz dependency in DuckDB's Python layer.
+    """
     if isinstance(value, datetime):
         dt = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc).isoformat()
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
     if isinstance(value, (int, float)):
-        # Unix timestamp
-        dt = datetime.fromtimestamp(value, tz=timezone.utc)
-        return dt.isoformat()
+        return datetime.utcfromtimestamp(value)
     if isinstance(value, str):
-        # Try to parse common formats
         for fmt in (
             "%Y-%m-%dT%H:%M:%S.%fZ",
             "%Y-%m-%dT%H:%M:%SZ",
+            "%Y-%m-%dT%H:%M:%S.%f+00:00",
+            "%Y-%m-%dT%H:%M:%S+00:00",
             "%Y-%m-%dT%H:%M:%S",
             "%Y-%m-%d %H:%M:%S",
             "%Y-%m-%d",
         ):
             try:
-                dt = datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
-                return dt.isoformat()
+                return datetime.strptime(value, fmt).replace(tzinfo=None)
             except ValueError:
                 continue
-        return value  # Return as-is if parsing fails
-    return str(value)
+        logger.warning("Could not parse timestamp %r — using current time", value)
+        return datetime.utcnow()
+    return datetime.utcnow()
 
 
 def _check_required(event: dict[str, Any], table: MdeTable) -> list[str]:
