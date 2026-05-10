@@ -74,6 +74,7 @@ COVERAGE: dict[str, str] = {
     "=~ case-insensitive equals": "supported → LOWER(a) = LOWER(b)",
     "!~ case-insensitive not-equals": "supported → LOWER(a) != LOWER(b)",
     "render": "supported — stripped from SQL; chart type in EmitResult.render_hint",
+    "getschema": "supported — returns ColumnName, ColumnOrdinal, DataType, ColumnType from MDE schema (full table schema; project-before-getschema not reflected)",
     "make_set() / make_list()": "planned",
     "arg_max() / arg_min()": "planned",
     "pack() / pack_all()": "planned",
@@ -154,6 +155,7 @@ KQL_KEYWORDS: frozenset[str] = frozenset({
     "distinct", "limit", "take", "render", "mv-expand",
     "isempty", "isnotempty", "toupper", "tolower", "tostring",
     "toint", "tolong", "strcat", "split", "parse_json",
+    "getschema",
 })
 
 
@@ -478,6 +480,11 @@ class MvExpandStage:
 
 
 @dataclass
+class GetSchemaStage:
+    pass
+
+
+@dataclass
 class KqlPipeline:
     table: str
     stages: list
@@ -585,6 +592,9 @@ class KqlParser:
             elif self._match_keyword("mv-expand"):
                 self._advance()
                 stages.append(self._parse_mv_expand())
+            elif self._match_keyword("getschema"):
+                self._advance()
+                stages.append(GetSchemaStage())
             elif self._match_keyword("render"):
                 self._advance()
                 render_hint = self._parse_render()
@@ -1322,6 +1332,32 @@ class SqlEmitter:
                     extra_join=f"CROSS JOIN UNNEST({col}) AS t_{col}({col})",
                     ctes=ctes,
                 )
+                return EmitResult(
+                    sql=sql,
+                    render_hint=pipeline.render_hint,
+                    warnings=warnings or [],
+                    cte_names=cte_names,
+                )
+
+            elif isinstance(stage, GetSchemaStage):
+                tbl_def = MDE_TABLES.get(table)
+                if tbl_def:
+                    rows = [
+                        f"('{col.name}', {i}, '{col.dtype}', '{col.dtype}')"
+                        for i, col in enumerate(tbl_def.columns)
+                    ]
+                    values_sql = ",\n  ".join(rows)
+                    sql = (
+                        f"SELECT * FROM (VALUES\n  {values_sql}\n)"
+                        f" t(ColumnName, ColumnOrdinal, DataType, ColumnType)"
+                    )
+                else:
+                    sql = (
+                        "SELECT NULL AS ColumnName, NULL AS ColumnOrdinal, "
+                        "NULL AS DataType, NULL AS ColumnType WHERE 1=0"
+                    )
+                if ctes:
+                    sql = f"WITH {', '.join(ctes)}\n{sql}"
                 return EmitResult(
                     sql=sql,
                     render_hint=pipeline.render_hint,

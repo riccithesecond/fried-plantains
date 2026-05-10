@@ -12,6 +12,7 @@ tables in a single upload. The response lists every table written and the event
 count per table.
 """
 
+import gzip
 import json
 import logging
 import time
@@ -20,6 +21,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, UploadFile
 
 from backend.api.auth import get_current_user
+from backend.engine.duckdb_pool import get_pool
 from backend.ingest.normalizer import normalize
 from backend.ingest.validator import validate_upload
 from backend.ingest.writer import write_parquet
@@ -92,6 +94,11 @@ async def upload_logs(
     start_ms = time.monotonic()
 
     content = await validate_upload(file)
+
+    # Decompress gzip content before parsing — magic bytes \x1f\x8b indicate gzip
+    if content[:2] == b"\x1f\x8b":
+        content = gzip.decompress(content)
+
     raw_text = content.decode("utf-8", errors="replace")
 
     # Parse — explicit source type wins over auto-detection
@@ -140,6 +147,9 @@ async def upload_logs(
             write_parquet(normalized, tbl, now)
             tables_written[tbl] = len(normalized)
             logger.info("Ingested %d events into %s", len(normalized), tbl)
+            # Re-register the DuckDB view now that files exist (view may have
+            # failed to register at startup before first ingest).
+            get_pool().refresh_view(tbl)
 
     total = sum(tables_written.values())
     duration_ms = int((time.monotonic() - start_ms) * 1000)

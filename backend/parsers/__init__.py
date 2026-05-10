@@ -14,6 +14,7 @@ from backend.parsers.base_parser import BaseParser
 from backend.parsers.cloudflare import CloudflareParser
 from backend.parsers.cloudtrail import CloudTrailParser
 from backend.parsers.defender import DefenderParser
+from backend.parsers.mde_native import MdeNativeParser
 from backend.parsers.proofpoint import ProofpointParser
 from backend.parsers.syslog import SyslogParser
 from backend.parsers.windows_event import WindowsEventParser
@@ -28,24 +29,26 @@ PARSERS: list[type[BaseParser]] = [
     ProofpointParser,
     AbnormalParser,
     SyslogParser,
-    DefenderParser,  # Broad heuristic — must be last
+    MdeNativeParser,  # Pre-normalized MDE NDJSON — before Defender's broad heuristic
+    DefenderParser,   # Broad heuristic — must be last
 ]
 
 # Named source type registry used by the ingest API when the caller specifies
 # an explicit source. Values are parser classes; the ingest layer handles the
 # different return shapes (list[{table,data}] vs dict[table, list]).
 SOURCE_TYPES: dict[str, type] = {
-    "cloudtrail":       CloudTrailParser,
-    "cloudflare":       CloudflareParser,
-    "zscaler_web":      ZscalerParser,
-    "zscaler_dns":      ZscalerParser,
-    "proofpoint_tap":   ProofpointParser,
+    "cloudtrail":        CloudTrailParser,
+    "cloudflare":        CloudflareParser,
+    "zscaler_web":       ZscalerParser,
+    "zscaler_dns":       ZscalerParser,
+    "proofpoint_tap":    ProofpointParser,
     "proofpoint_syslog": ProofpointParser,
-    "abnormal_threats": AbnormalParser,
-    "abnormal_cases":   AbnormalParser,
-    "windows_event":    WindowsEventParser,
-    "syslog":           SyslogParser,
-    "defender":         DefenderParser,
+    "abnormal_threats":  AbnormalParser,
+    "abnormal_cases":    AbnormalParser,
+    "windows_event":     WindowsEventParser,
+    "syslog":            SyslogParser,
+    "defender":          DefenderParser,
+    "mde_native":        MdeNativeParser,  # logforge synthetic log output
 }
 
 

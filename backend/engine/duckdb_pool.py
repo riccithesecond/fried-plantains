@@ -43,17 +43,35 @@ class DuckDbPool:
         Views are registered at startup. They are virtual — no data is loaded
         into memory. Each SELECT against a view triggers DuckDB's Parquet reader,
         which applies predicate pushdown and projection pruning automatically.
+        Views over empty partitions fail at creation time in DuckDB — they are
+        re-registered after first write via refresh_view().
         """
         for sql in get_duckdb_view_sql(self._storage_root):
             try:
                 self._conn.execute(sql)
-                # Extract table name for logging
                 table_name = sql.split("VIEW ")[1].split(" AS")[0]
                 logger.debug("Registered DuckDB view: %s", table_name)
             except duckdb.Error as exc:
-                # Views over non-existent Parquet paths are fine — the path
-                # simply returns zero rows until data is ingested.
-                logger.debug("View registration note: %s", exc)
+                # View creation fails when no parquet files exist yet — normal at
+                # startup before first ingest. refresh_view() registers it later.
+                logger.debug("View registration deferred (no data yet): %s", exc)
+
+    def refresh_view(self, table_name: str) -> None:
+        """Register or re-register the DuckDB view for a single table.
+
+        Called after write_parquet() succeeds so that queries against the table
+        work immediately — even if the view failed to register at startup because
+        no parquet files existed yet.
+        """
+        sqls = get_duckdb_view_sql(self._storage_root)
+        for sql in sqls:
+            if f"VIEW {table_name} AS" in sql:
+                try:
+                    self._conn.execute(sql)
+                    logger.debug("Refreshed DuckDB view: %s", table_name)
+                except duckdb.Error as exc:
+                    logger.warning("Failed to refresh view %s: %s", table_name, exc)
+                return
 
     async def execute(
         self,
