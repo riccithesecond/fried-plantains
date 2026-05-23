@@ -18,13 +18,14 @@ import logging
 import time
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, UploadFile
+from fastapi import APIRouter, Depends, Request, UploadFile
 
 from backend.api.auth import get_current_user
 from backend.engine.duckdb_pool import get_pool
 from backend.ingest.normalizer import normalize
 from backend.ingest.validator import validate_upload
 from backend.ingest.writer import write_parquet
+from backend.limiter import INGEST_LIMIT, limiter
 from backend.models.user import User
 from backend.parsers import SOURCE_TYPES, detect_and_parse
 from backend.parsers.cloudflare import CloudflareParser
@@ -71,7 +72,9 @@ def _coerce_to_table_dict(
 
 
 @router.post("/upload")
+@limiter.limit(INGEST_LIMIT)
 async def upload_logs(
+    request: Request,
     file: UploadFile,
     table: str | None = None,
     source: str | None = None,

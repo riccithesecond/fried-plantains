@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
+from jose.jwt import get_unverified_claims
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
@@ -35,10 +36,27 @@ _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 _ALGORITHM = "HS256"
 
-# In-memory refresh token revocation set.
+# In-memory refresh token revocation store: token → expiry (Unix timestamp).
 # Production: replace with Redis SET with TTL equal to refresh token expiry.
-# This means revoked tokens are forgotten on server restart — acceptable for MVP.
-_revoked_refresh_tokens: set[str] = set()
+# Tokens forgotten on server restart — acceptable for MVP.
+_revoked_refresh_tokens: dict[str, float] = {}
+
+
+def _revoke_token(token: str) -> None:
+    """Add a token to the revocation store, recording its expiry for pruning."""
+    try:
+        exp = float(get_unverified_claims(token).get("exp", 0))
+    except Exception:
+        exp = 0.0
+    _revoked_refresh_tokens[token] = exp
+
+
+def _prune_revoked_tokens() -> None:
+    """Remove expired entries — they can no longer be used regardless."""
+    now = datetime.now(timezone.utc).timestamp()
+    expired = [t for t, exp in _revoked_refresh_tokens.items() if exp < now]
+    for t in expired:
+        del _revoked_refresh_tokens[t]
 
 
 class TokenResponse(BaseModel):
@@ -166,6 +184,7 @@ async def refresh(request: Request, response: Response) -> TokenResponse:
     if not refresh_token:
         raise HTTPException(status_code=401, detail="No refresh token.")
 
+    _prune_revoked_tokens()
     if refresh_token in _revoked_refresh_tokens:
         raise HTTPException(status_code=401, detail="Token has been revoked.")
 
@@ -186,7 +205,7 @@ async def refresh(request: Request, response: Response) -> TokenResponse:
     new_refresh = _create_refresh_token(user.username)
 
     # Rotate refresh token — revoke old, issue new
-    _revoked_refresh_tokens.add(refresh_token)
+    _revoke_token(refresh_token)
     response.set_cookie(
         key="refresh_token",
         value=new_refresh,
@@ -213,7 +232,7 @@ async def logout(
     """Revoke the refresh token and clear the cookie."""
     refresh_token = request.cookies.get("refresh_token")
     if refresh_token:
-        _revoked_refresh_tokens.add(refresh_token)
+        _revoke_token(refresh_token)
     response.delete_cookie("refresh_token", path="/api/v1/auth/refresh")
     logger.info("Logout: user=%s", current_user.username)
     return {"detail": "Logged out."}

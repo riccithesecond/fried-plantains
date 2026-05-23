@@ -23,12 +23,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from backend.api import alerts, auth, detections, ingest, query
 from backend.config import settings
 from backend.engine.detection_runner import detection_loop
 from backend.engine.duckdb_pool import close_pool, init_pool
 from backend.exceptions import FPBaseException
+from backend.limiter import limiter
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
@@ -74,6 +78,11 @@ app = FastAPI(
     redoc_url="/api/v1/redoc",
     openapi_url="/api/v1/openapi.json",
 )
+
+# Rate limiting — slowapi middleware must be added before CORS
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS — exact origin only, never wildcard
 app.add_middleware(

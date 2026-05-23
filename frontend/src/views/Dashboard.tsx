@@ -2,7 +2,8 @@
  * Dashboard.tsx — Overview of platform health and detection activity.
  *
  * Four metric cards + event volume chart (Recharts) + alert severity chart.
- * Data sourced from the alerts API — event volume is derived from alert event counts.
+ * Event volume is queried live from the data lake via SQL — three parallel
+ * queries, one per table, merged into a single 24-hour time series.
  */
 
 import { useEffect, useState } from "react";
@@ -18,16 +19,67 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { listAlerts, listDetections } from "../api/client";
+import { executeQuery, listAlerts, listDetections } from "../api/client";
 import type { IAlert, IDetectionRule } from "../api/types";
 import AlertBadge from "../components/AlertBadge";
 import SeverityPill from "../components/SeverityPill";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface IMetricCardProps {
   label: string;
   value: string | number;
   sub?: string;
 }
+
+interface IVolumePoint {
+  hour: string;
+  DeviceProcessEvents: number;
+  DeviceNetworkEvents: number;
+  DeviceLogonEvents: number;
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const VOLUME_TABLES = [
+  "DeviceProcessEvents",
+  "DeviceNetworkEvents",
+  "DeviceLogonEvents",
+] as const;
+
+type TVolumeTable = (typeof VOLUME_TABLES)[number];
+
+function buildVolumeQuery(table: string): string {
+  return (
+    `SELECT date_trunc('hour', Timestamp) AS hour, COUNT(*) AS event_count ` +
+    `FROM ${table} ` +
+    `WHERE Timestamp > NOW() - INTERVAL 24 HOUR ` +
+    `GROUP BY 1 ORDER BY 1 ASC`
+  );
+}
+
+/** Build an empty 24-slot hour map — all tables zeroed. */
+function emptyHourMap(): Record<string, IVolumePoint> {
+  const map: Record<string, IVolumePoint> = {};
+  for (let h = 0; h < 24; h++) {
+    const key = `${String(h).padStart(2, "0")}:00`;
+    map[key] = {
+      hour: key,
+      DeviceProcessEvents: 0,
+      DeviceNetworkEvents: 0,
+      DeviceLogonEvents: 0,
+    };
+  }
+  return map;
+}
+
+// ---------------------------------------------------------------------------
+// Components
+// ---------------------------------------------------------------------------
 
 function MetricCard({ label, value, sub }: IMetricCardProps) {
   return (
@@ -39,44 +91,90 @@ function MetricCard({ label, value, sub }: IMetricCardProps) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------------
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [alerts, setAlerts] = useState<IAlert[]>([]);
   const [rules, setRules] = useState<IDetectionRule[]>([]);
+  const [volumeData, setVolumeData] = useState<IVolumePoint[]>([]);
+  const [totalEventCount, setTotalEventCount] = useState(0);
+  const [topSource, setTopSource] = useState<string>("—");
   const [loading, setLoading] = useState(true);
+  const [volumeLoading, setVolumeLoading] = useState(true);
 
   useEffect(() => {
+    // Load alerts + rules immediately
     Promise.all([listAlerts(), listDetections()])
       .then(([a, r]) => {
         setAlerts(a);
         setRules(r);
       })
       .finally(() => setLoading(false));
+
+    // Load volume data in parallel — errors are caught per-table so a missing
+    // table (no parquet yet) degrades gracefully to a zero line.
+    setVolumeLoading(true);
+    Promise.all(
+      VOLUME_TABLES.map((t) =>
+        executeQuery(buildVolumeQuery(t), "sql", 24).catch(() => null)
+      )
+    )
+      .then((results) => {
+        const hourMap = emptyHourMap();
+        let total = 0;
+        const tableTotals: Record<TVolumeTable, number> = {
+          DeviceProcessEvents: 0,
+          DeviceNetworkEvents: 0,
+          DeviceLogonEvents: 0,
+        };
+
+        results.forEach((result, i) => {
+          if (!result) return;
+          const table = VOLUME_TABLES[i];
+          for (const row of result.rows) {
+            const [rawHour, count] = row as [string, number];
+            if (!rawHour) continue;
+            const d = new Date(rawHour);
+            const key = `${String(d.getUTCHours()).padStart(2, "0")}:00`;
+            if (hourMap[key]) {
+              hourMap[key][table] = count;
+              total += count;
+              tableTotals[table] += count;
+            }
+          }
+        });
+
+        setVolumeData(Object.values(hourMap));
+        setTotalEventCount(total);
+
+        // Top source = table with most events in the last 24h
+        const top = (Object.entries(tableTotals) as [TVolumeTable, number][])
+          .sort(([, a], [, b]) => b - a)[0];
+        if (top && top[1] > 0) setTopSource(top[0]);
+      })
+      .finally(() => setVolumeLoading(false));
   }, []);
 
   const openAlerts = alerts.filter((a) => a.status === "open").length;
   const activeRules = rules.filter((r) => r.enabled).length;
-  const totalEvents = alerts.reduce((sum, a) => sum + a.event_count, 0);
 
-  // Alert severity distribution for bar chart
-  const severityData = ["critical", "high", "medium", "low", "info"].map((s) => ({
-    severity: s.charAt(0).toUpperCase() + s.slice(1),
-    count: alerts.filter((a) => a.severity === s).length,
-  }));
-
-  // Fake hourly volume data based on alerts (for demo)
-  const volumeData = Array.from({ length: 24 }, (_, i) => ({
-    hour: `${String(i).padStart(2, "0")}:00`,
-    DeviceProcessEvents: Math.floor(Math.random() * 200 + 50),
-    DeviceNetworkEvents: Math.floor(Math.random() * 150 + 30),
-    DeviceLogonEvents: Math.floor(Math.random() * 80 + 10),
-  }));
+  const severityData = ["critical", "high", "medium", "low", "info"].map(
+    (s) => ({
+      severity: s.charAt(0).toUpperCase() + s.slice(1),
+      count: alerts.filter((a) => a.severity === s).length,
+    })
+  );
 
   const recent = alerts.slice(0, 10);
 
   if (loading) {
     return (
-      <div className="p-6 text-muted-foreground text-sm">Loading dashboard...</div>
+      <div className="p-6 text-muted-foreground text-sm">
+        Loading dashboard...
+      </div>
     );
   }
 
@@ -86,26 +184,50 @@ export default function Dashboard() {
 
       {/* Metric cards */}
       <div className="grid grid-cols-4 gap-4">
-        <MetricCard label="Events (24h)" value={totalEvents.toLocaleString()} />
-        <MetricCard label="Open Alerts" value={openAlerts} sub={`${alerts.length} total`} />
-        <MetricCard label="Active Rules" value={activeRules} sub={`${rules.length} total`} />
-        <MetricCard label="Top Source" value="DeviceProcessEvents" />
+        <MetricCard
+          label="Events (24h)"
+          value={totalEventCount.toLocaleString()}
+          sub={volumeLoading ? "loading…" : undefined}
+        />
+        <MetricCard
+          label="Open Alerts"
+          value={openAlerts}
+          sub={`${alerts.length} total`}
+        />
+        <MetricCard
+          label="Active Rules"
+          value={activeRules}
+          sub={`${rules.length} total`}
+        />
+        <MetricCard label="Top Source" value={topSource} />
       </div>
 
       {/* Charts row */}
       <div className="grid grid-cols-3 gap-4">
         {/* Event volume area chart — 2/3 width */}
         <div className="col-span-2 bg-card border border-border rounded-lg p-4">
-          <div className="text-sm font-medium mb-3">Event Volume (24h)</div>
+          <div className="text-sm font-medium mb-3">
+            Event Volume (24h)
+            {volumeLoading && (
+              <span className="ml-2 text-xs text-muted-foreground font-normal">
+                loading…
+              </span>
+            )}
+          </div>
           <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={volumeData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="hsl(var(--border))"
+              />
               <XAxis
                 dataKey="hour"
                 tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
                 interval={3}
               />
-              <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+              <YAxis
+                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              />
               <Tooltip
                 contentStyle={{
                   backgroundColor: "hsl(var(--card))",
@@ -146,8 +268,14 @@ export default function Dashboard() {
           <div className="text-sm font-medium mb-3">Alerts by Severity</div>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={severityData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis type="number" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="hsl(var(--border))"
+              />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              />
               <YAxis
                 type="category"
                 dataKey="severity"
@@ -173,7 +301,9 @@ export default function Dashboard() {
           Recent Alerts
         </div>
         {recent.length === 0 ? (
-          <div className="p-6 text-center text-sm text-muted-foreground">No alerts yet.</div>
+          <div className="p-6 text-center text-sm text-muted-foreground">
+            No alerts yet.
+          </div>
         ) : (
           <table className="w-full text-sm">
             <thead>

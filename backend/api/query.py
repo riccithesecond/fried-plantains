@@ -12,7 +12,7 @@ appending LIMIT to the transpiled query.
 import logging
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from backend.api.auth import get_current_user
@@ -20,6 +20,7 @@ from backend.config import settings
 from backend.engine.duckdb_pool import get_pool
 from backend.engine.query_router import route
 from backend.exceptions import QueryException
+from backend.limiter import QUERY_LIMIT, limiter
 from backend.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -49,8 +50,10 @@ class QueryResponse(BaseModel):
 
 
 @router.post("/execute", response_model=QueryResponse)
+@limiter.limit(QUERY_LIMIT)
 async def execute_query(
-    request: QueryRequest,
+    request: Request,
+    body: QueryRequest,
     current_user: User = Depends(get_current_user),
 ) -> QueryResponse:
     """Execute a KQL, SPL, or SQL query and return results.
@@ -61,10 +64,10 @@ async def execute_query(
     start_ms = time.monotonic()
 
     # Transpile / validate
-    sql = route(request.query, request.language)
+    sql = route(body.query, body.language)
 
     # Inject LIMIT — ensure user-provided limit is respected
-    sql_with_limit = _apply_limit(sql, request.limit)
+    sql_with_limit = _apply_limit(sql, body.limit)
 
     # Execute via pool
     pool = get_pool()
@@ -86,7 +89,7 @@ async def execute_query(
     logger.info(
         "Query executed: user=%s lang=%s rows=%d duration=%dms",
         current_user.username,
-        request.language,
+        body.language,
         len(rows),
         duration_ms,
     )

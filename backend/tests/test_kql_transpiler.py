@@ -542,6 +542,31 @@ class TestEmailTableRecognition:
                     f"{rule['id']} queries an email table but mde_portable is not False"
                 )
 
+    def test_join_filtered_subpipeline_not_dropped(self):
+        """Stages inside a join sub-pipeline must survive transpilation."""
+        sql = transpile(
+            "DeviceProcessEvents"
+            " | join kind=inner ("
+            "     DeviceNetworkEvents"
+            "     | where RemotePort == 4444"
+            " ) on DeviceId"
+        )
+        assert "RemotePort" in sql
+        assert "4444" in sql
+        assert "JOIN" in sql.upper()
+
+    def test_join_subpipeline_string_literal_preserved(self):
+        """String literals inside a join sub-pipeline must not lose their quotes."""
+        sql = transpile(
+            "DeviceProcessEvents"
+            " | join kind=inner ("
+            "     DeviceNetworkEvents"
+            "     | where Protocol == 'TCP'"
+            " ) on DeviceId"
+        )
+        assert "'TCP'" in sql
+        assert "JOIN" in sql.upper()
+
     def test_fp_0021_cross_layer_join_transpiles(self):
         """FP-0021 is a let + join on NetworkMessageId — verify the transpiler handles it."""
         query = """

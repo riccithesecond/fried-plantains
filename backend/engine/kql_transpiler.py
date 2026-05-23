@@ -167,6 +167,24 @@ class KqlToken:
     col: int
 
 
+def _tokens_to_kql(tokens: list["KqlToken"]) -> str:
+    """Reconstruct a KQL fragment from tokens, restoring quotes on string literals.
+
+    The tokenizer strips quotes from STRING tokens. When we re-assemble a token
+    slice for recursive transpilation (let sub-pipelines, join sub-pipelines),
+    we must put them back or the inner transpiler will treat the values as
+    column references instead of literals.
+    """
+    parts: list[str] = []
+    for tok in tokens:
+        if tok.type == TT.STRING:
+            escaped = tok.value.replace("'", "\\'")
+            parts.append(f"'{escaped}'")
+        else:
+            parts.append(tok.value)
+    return " ".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # Tokenizer
 # ---------------------------------------------------------------------------
@@ -465,7 +483,7 @@ class DistinctStage:
 @dataclass
 class JoinStage:
     kind: str           # "inner" | "leftouter" | "leftanti"
-    right_table: str
+    right_ref: str      # bare CTE/table name, or "(SELECT ...)" parenthesized subquery
     on_columns: list[str]
 
 
@@ -628,7 +646,7 @@ class KqlParser:
         name_tok = self._advance()
         self._expect(TT.EQ)
 
-        expr_tokens: list[str] = []
+        expr_tokens: list[KqlToken] = []
         depth = 0
         while self._peek().type != TT.EOF:
             tok = self._peek()
@@ -638,8 +656,8 @@ class KqlParser:
                 depth -= 1
             if depth == 0 and tok.type == TT.SEMICOLON:
                 break
-            expr_tokens.append(self._advance().value)
-        raw_expr = " ".join(expr_tokens).strip()
+            expr_tokens.append(self._advance())
+        raw_expr = _tokens_to_kql(expr_tokens)
 
         first_word = raw_expr.split()[0] if raw_expr else ""
         if first_word in MDE_TABLES and "|" in raw_expr:
@@ -736,19 +754,42 @@ class KqlParser:
             self._advance()
             self._expect(TT.EQ)
             kind = self._advance().value.lower()
-        right_table = ""
+        right_ref = ""
         on_cols: list[str] = []
         if self._peek().type == TT.LPAREN:
-            self._advance()
-            right_table = self._parse_table_name()
-            while self._peek().type not in (TT.RPAREN, TT.EOF):
-                self._advance()
+            self._advance()  # consume (
+            sub_tokens: list[KqlToken] = []
+            depth = 0
+            while self._peek().type != TT.EOF:
+                tok = self._peek()
+                if tok.type == TT.LPAREN:
+                    depth += 1
+                elif tok.type == TT.RPAREN:
+                    if depth == 0:
+                        break
+                    depth -= 1
+                sub_tokens.append(self._advance())
             if self._peek().type == TT.RPAREN:
-                self._advance()
+                self._advance()  # consume )
+            raw_sub = _tokens_to_kql(sub_tokens).strip()
+            if "|" in raw_sub:
+                # Sub-pipeline — recursively transpile to preserve all stages
+                try:
+                    inner_sql = KqlTranspiler.transpile(raw_sub)
+                    right_ref = f"({inner_sql})"
+                except Exception:
+                    first_word = raw_sub.split()[0] if raw_sub else ""
+                    right_ref = f"(SELECT * FROM {first_word})"
+            else:
+                # Plain table reference in parens
+                right_ref = f"(SELECT * FROM {raw_sub})"
+        elif self._peek().type in (TT.IDENT, TT.KEYWORD):
+            # Bare CTE or table name: | join kind=inner MyCteBinding on Col
+            right_ref = self._advance().value
         if self._match_keyword("on"):
             self._advance()
             on_cols = self._parse_column_list()
-        return JoinStage(kind=kind, right_table=right_table, on_columns=on_cols)
+        return JoinStage(kind=kind, right_ref=right_ref, on_columns=on_cols)
 
     def _parse_union(self) -> UnionStage:
         tables: list[str] = []
@@ -1373,7 +1414,7 @@ class SqlEmitter:
                 }
                 join_type = join_type_map.get(stage.kind, "INNER JOIN")
                 on_clause = " AND ".join(f"t1.{c} = t2.{c}" for c in stage.on_columns)
-                sql = f"SELECT t1.* FROM {table} t1 {join_type} {stage.right_table} t2 ON {on_clause}"
+                sql = f"SELECT t1.* FROM {table} t1 {join_type} {stage.right_ref} t2 ON {on_clause}"
                 if stage.kind == "leftanti":
                     null_check = " AND ".join(f"t2.{c} IS NULL" for c in stage.on_columns)
                     sql += f" WHERE {null_check}"
