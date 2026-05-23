@@ -18,6 +18,7 @@ Usage:
 
 import argparse
 import json
+import logging
 import random
 import sys
 import uuid
@@ -29,6 +30,21 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.schema.mde_tables import ACTION_TYPES, MDE_TABLES
+
+logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
+# Device tables carry DeviceId/DeviceName/AccountSid etc.
+# Non-device tables (cloud, email, network-security) get their identity fields
+# from the scenario template rather than the generic attack event base.
+_DEVICE_TABLE_NAMES = frozenset({
+    "DeviceProcessEvents",
+    "DeviceNetworkEvents",
+    "DeviceFileEvents",
+    "DeviceRegistryEvents",
+    "DeviceLogonEvents",
+    "DeviceEvents",
+})
 
 # ---------------------------------------------------------------------------
 # Realistic value pools — match real MDE field value formats
@@ -197,6 +213,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
         "detection_rules": ["FP-0008"],
         "events": [
             {
+                "AccountId": "123456789012",
                 "ActionType": "AuthAttempt",
                 "UserIdentityType": "Root",
                 "UserIdentityArn": "arn:aws:iam::123456789012:root",
@@ -211,6 +228,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
                 "MFAAuthenticated": False,
             },
             {
+                "AccountId": "123456789012",
                 "ActionType": "ManagementRead",
                 "UserIdentityType": "Root",
                 "UserIdentityArn": "arn:aws:iam::123456789012:root",
@@ -232,9 +250,11 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
         "detection_rules": ["FP-0009"],
         "events": [
             {
+                "AccountId": "123456789012",
                 "ActionType": "ConfigChange",
                 "UserIdentityType": "IAMUser",
                 "UserIdentityName": "attacker",
+                "UserIdentityArn": "arn:aws:iam::123456789012:user/attacker",
                 "EventSource": "cloudtrail.amazonaws.com",
                 "EventName": "StopLogging",
                 "EventCategory": "Management",
@@ -245,9 +265,11 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
                 "MFAAuthenticated": False,
             },
             {
+                "AccountId": "123456789012",
                 "ActionType": "ConfigChange",
                 "UserIdentityType": "IAMUser",
                 "UserIdentityName": "attacker",
+                "UserIdentityArn": "arn:aws:iam::123456789012:user/attacker",
                 "EventSource": "cloudtrail.amazonaws.com",
                 "EventName": "DeleteTrail",
                 "EventCategory": "Management",
@@ -265,9 +287,11 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
         "detection_rules": ["FP-0010"],
         "events": [
             {
+                "AccountId": "123456789012",
                 "ActionType": "ManagementWrite",
                 "UserIdentityType": "IAMUser",
                 "UserIdentityName": "attacker",
+                "UserIdentityArn": "arn:aws:iam::123456789012:user/attacker",
                 "EventSource": "iam.amazonaws.com",
                 "EventName": "CreateUser",
                 "EventCategory": "Management",
@@ -279,9 +303,11 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
                 "MFAAuthenticated": False,
             },
             {
+                "AccountId": "123456789012",
                 "ActionType": "ManagementWrite",
                 "UserIdentityType": "IAMUser",
                 "UserIdentityName": "attacker",
+                "UserIdentityArn": "arn:aws:iam::123456789012:user/attacker",
                 "EventSource": "iam.amazonaws.com",
                 "EventName": "AttachUserPolicy",
                 "EventCategory": "Management",
@@ -410,6 +436,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
         "detection_rules": ["FP-0016"],
         "events": [
             {
+                "NetworkMessageId": "phish-inv-8821@micros0ft-billing.com",
                 "ActionType": "PhishFiltered",
                 "SenderFromAddress": "invoices@micros0ft-billing.com",
                 "SenderFromDomain": "micros0ft-billing.com",
@@ -454,6 +481,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
         "detection_rules": ["FP-0017"],
         "events": [
             {
+                "NetworkMessageId": "impostor-ceo-q1@corp-corp.com",
                 "ActionType": "Delivered",
                 "SenderFromAddress": "ceo@corp-corp.com",
                 "SenderFromDomain": "corp-corp.com",
@@ -498,6 +526,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
         "detection_rules": ["FP-0018"],
         "events": [
             {
+                "NetworkMessageId": "malware-contract-docusign@legit-looking.net",
                 "ActionType": "SandboxBlocked",
                 "SenderFromAddress": "hr-team@legit-looking.net",
                 "SenderFromDomain": "legit-looking.net",
@@ -542,6 +571,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
         "detection_rules": ["FP-0019"],
         "events": [
             {
+                "NetworkMessageId": "click-phish-evil@evil-domain.xyz",
                 "ActionType": "UrlBlocked",
                 "RecipientEmailAddress": "alice@corp.com",
                 "SenderFromAddress": "phisher@evil-domain.xyz",
@@ -708,7 +738,7 @@ def _generate_benign_process_event(
 
 
 def _generate_benign_network_event(
-    device: str, user: str, ts: str, rng: random.Random
+    device: str, user: str, domain: str, ts: str, rng: random.Random
 ) -> dict[str, Any]:
     remote_ips = ["8.8.8.8", "1.1.1.1", "13.107.42.14", "52.114.132.73", "40.90.4.128"]
     return {
@@ -753,7 +783,7 @@ def _generate_benign_logon_event(
 
 
 def _generate_benign_registry_event(
-    device: str, user: str, ts: str, rng: random.Random
+    device: str, user: str, domain: str, ts: str, rng: random.Random
 ) -> dict[str, Any]:
     benign_keys = [
         "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RecentDocs",
@@ -1082,6 +1112,34 @@ def _generate_benign_proofpoint_click_event(
     }
 
 
+def _generate_benign_cloudflare_firewall_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    return {
+        "Timestamp": ts,
+        "ReportId": f"cf{rng.randint(100000000, 999999999):x}",
+        "ActionType": "FirewallAllow",
+        "ClientIP": f"203.{rng.randint(0,255)}.{rng.randint(0,255)}.{rng.randint(1,254)}",
+        "ClientCountry": rng.choice(["US", "GB", "DE", "CA", "AU"]),
+        "ClientASN": rng.randint(1000, 65000),
+        "ClientRequestMethod": rng.choice(["GET", "GET", "POST"]),
+        "ClientRequestHost": rng.choice(_CF_DOMAINS),
+        "ClientRequestURI": rng.choice(_CF_PATHS),
+        "ClientRequestUserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120",
+        "EdgeColoCode": rng.choice(["DFW", "LHR", "SIN"]),
+        "FirewallAction": "allow",
+        "FirewallRuleID": f"allow-{rng.randint(100,999)}",
+        "FirewallRuleDescription": "Allow known good traffic",
+        "FirewallSource": "firewallrules",
+        "MatchIndex": 0,
+        "Metadata": None,
+        "OriginResponseStatus": 200,
+        "SampledRate": 1.0,
+        "ZoneName": rng.choice(_CF_DOMAINS),
+        "AdditionalFields": {},
+    }
+
+
 # AbnormalThreatEvents and AbnormalCaseEvents have no benign generators —
 # every Abnormal record represents a detection by definition.
 
@@ -1097,6 +1155,7 @@ _BENIGN_GENERATORS = {
     "ZscalerDnsEvents": _generate_benign_zscaler_dns_event,
     "ProofpointMessageEvents": _generate_benign_proofpoint_message_event,
     "ProofpointClickEvents": _generate_benign_proofpoint_click_event,
+    "CloudflareFirewallEvents": _generate_benign_cloudflare_firewall_event,
 }
 
 
@@ -1173,25 +1232,35 @@ def generate(
         user = rng.choice(_USERNAMES[:8])
         domain = rng.choice(_DOMAINS[:2])
 
-        event = {
-            "Timestamp": ts,
-            "DeviceId": str(uuid.uuid5(uuid.NAMESPACE_DNS, device)),
-            "DeviceName": device,
-            "AccountDomain": domain,
-            "AccountName": user,
-            "AccountSid": f"S-1-5-21-{rng.randint(100000,999999)}-{rng.randint(100000,999999)}-{rng.randint(1000,9999)}-1001",
-            "SHA256": _random_sha256(rng),
-            "MD5": "".join(rng.choices("0123456789abcdef", k=32)),
-            "ProcessId": rng.randint(1000, 65535),
-            "InitiatingProcessId": rng.randint(100, 9999),
-            "InitiatingProcessSHA256": _random_sha256(rng),
-            "InitiatingProcessAccountName": user,
-            "LogonId": f"0x{rng.randint(100000, 999999):x}",
-            "InitiatingProcessParentFileName": "cmd.exe",
-            "ReportId": str(uuid.uuid4()),
-            **template,
-        }
-        event["Timestamp"] = ts  # Override template timestamp
+        # Device tables carry process-/account-centric fields as a base.
+        # Cloud, email, and network-security tables get all required fields
+        # from the scenario template — don't pollute them with device noise.
+        if table in _DEVICE_TABLE_NAMES:
+            event = {
+                "Timestamp": ts,
+                "DeviceId": str(uuid.uuid5(uuid.NAMESPACE_DNS, device)),
+                "DeviceName": device,
+                "AccountDomain": domain,
+                "AccountName": user,
+                "AccountSid": f"S-1-5-21-{rng.randint(100000,999999)}-{rng.randint(100000,999999)}-{rng.randint(1000,9999)}-1001",
+                "SHA256": _random_sha256(rng),
+                "MD5": "".join(rng.choices("0123456789abcdef", k=32)),
+                "ProcessId": rng.randint(1000, 65535),
+                "InitiatingProcessId": rng.randint(100, 9999),
+                "InitiatingProcessSHA256": _random_sha256(rng),
+                "InitiatingProcessAccountName": user,
+                "LogonId": f"0x{rng.randint(100000, 999999):x}",
+                "InitiatingProcessParentFileName": "cmd.exe",
+                "ReportId": str(uuid.uuid4()),
+                **template,
+            }
+        else:
+            event = {
+                "Timestamp": ts,
+                "ReportId": str(uuid.uuid4()),
+                **template,
+            }
+        event["Timestamp"] = ts  # template may carry its own Timestamp — always use the generated one
         events.append(event)
         malicious_count += 1
 
@@ -1212,21 +1281,139 @@ def generate(
     return events, manifest
 
 
+# ---------------------------------------------------------------------------
+# Demo plan — one entry per (table, scenario, total_events, attack_ratio)
+# Covers every table that has an attack scenario. attack_ratio=1.0 for tables
+# without benign generators (Abnormal) so only attack events are produced.
+# ---------------------------------------------------------------------------
+
+_DEMO_PLAN: list[tuple[str, str, int, float]] = [
+    # (table, scenario, total_events, attack_ratio)
+    ("DeviceProcessEvents",      "encoded-powershell",               500, 0.05),
+    ("DeviceProcessEvents",      "lsass-dump",                       300, 0.05),
+    ("DeviceProcessEvents",      "certutil-download",                300, 0.05),
+    ("DeviceRegistryEvents",     "registry-persistence",             300, 0.05),
+    ("DeviceNetworkEvents",      "lateral-movement",                 400, 0.05),
+    ("DeviceLogonEvents",        "brute-force",                      500, 0.10),
+    ("AWSCloudTrailEvents",      "aws-root-usage",                   300, 0.05),
+    ("AWSCloudTrailEvents",      "aws-cloudtrail-disable",           200, 0.05),
+    ("AWSCloudTrailEvents",      "aws-iam-escalation",               200, 0.05),
+    ("CloudflareFirewallEvents", "cloudflare-waf-spike",             200, 0.20),
+    ("CloudflareDnsEvents",      "cloudflare-dns-threat",            200, 0.05),
+    ("ZscalerWebEvents",         "zscaler-malware-download",         300, 0.05),
+    ("ZscalerWebEvents",         "zscaler-dlp",                      300, 0.05),
+    ("ZscalerDnsEvents",         "zscaler-dns-sinkhole",             200, 0.05),
+    ("ProofpointMessageEvents",  "proofpoint-phish-verymalicious",   150, 0.10),
+    ("ProofpointMessageEvents",  "proofpoint-impostor-delivered",    150, 0.10),
+    ("ProofpointMessageEvents",  "proofpoint-malware-sandbox",       150, 0.10),
+    ("ProofpointClickEvents",    "proofpoint-click-blocked",          80, 0.15),
+    ("AbnormalThreatEvents",     "abnormal-bec-vip",                   1, 1.00),
+    ("AbnormalThreatEvents",     "abnormal-cross-layer-phish",         1, 1.00),
+    ("AbnormalCaseEvents",       "abnormal-case-high-severity",        1, 1.00),
+]
+
+
+def _ingest_to_storage(events: list[dict[str, Any]], table: str) -> tuple[int, int]:
+    """Normalize events and write to hive-style storage partitions.
+
+    Returns (written_count, skipped_count).
+    """
+    from backend.exceptions import SchemaException
+    from backend.ingest.normalizer import normalize
+    from backend.ingest.writer import write_parquet
+
+    normalized: list[dict[str, Any]] = []
+    skipped = 0
+    for event in events:
+        try:
+            normalized.append(normalize(event, table))
+        except SchemaException as exc:
+            skipped += 1
+            if skipped <= 3:
+                logger.warning("Skipped event for %s: %s", table, exc.detail)
+    if normalized:
+        write_parquet(normalized, table)
+    return len(normalized), skipped
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate synthetic MDE-compatible log events",
     )
-    parser.add_argument("--table", required=True, help="Target MDE table name")
+    parser.add_argument("--table", default=None, help="Target MDE table name (required unless --demo)")
     parser.add_argument("--events", type=int, default=1000, help="Total event count")
     parser.add_argument("--attack-ratio", type=float, default=0.05, help="Fraction of malicious events")
     parser.add_argument("--scenario", default=None, choices=list(_ATTACK_SCENARIOS.keys()),
                         metavar="SCENARIO", help=f"Attack scenario: {', '.join(_ATTACK_SCENARIOS)}")
-    parser.add_argument("--output", default="./generated", help="Output directory")
+    parser.add_argument("--output", default="./generated", help="Output directory for JSONL/Parquet")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument(
+        "--to-storage",
+        action="store_true",
+        help=(
+            "Normalize events and write directly to storage/ hive partitions "
+            "so they are immediately queryable via DuckDB views. "
+            "Requires the backend to be importable."
+        ),
+    )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help=(
+            "Generate a full-platform demo dataset: all attack scenarios across all tables, "
+            "written to storage/ hive partitions. Implies --to-storage. "
+            "Start the backend server after running this to see all detections fire."
+        ),
+    )
     args = parser.parse_args()
 
-    output_dir = Path(args.output)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # ------------------------------------------------------------------
+    # --demo: generate all scenarios for all tables and ingest to storage
+    # ------------------------------------------------------------------
+    if args.demo:
+        print("Generating full demo dataset...")
+        combined_manifest: list[dict] = []
+        total_written = 0
+        total_skipped = 0
+        for table, scenario, n_events, attack_ratio in _DEMO_PLAN:
+            events, manifest = generate(
+                table=table,
+                total_events=n_events,
+                attack_ratio=attack_ratio,
+                scenario=scenario,
+                seed=args.seed,
+            )
+            written, skipped = _ingest_to_storage(events, table)
+            total_written += written
+            total_skipped += skipped
+            combined_manifest.append({**manifest, "written": written, "skipped": skipped})
+            print(
+                f"  {table:<32} scenario={scenario:<38} "
+                f"written={written:>4}  skipped={skipped}"
+            )
+
+        ts_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        manifest_path = Path(args.output) / f"demo_manifest_{ts_str}.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        with manifest_path.open("w") as f:
+            json.dump(combined_manifest, f, indent=2, default=str)
+
+        print(f"\nTotal events written to storage: {total_written}")
+        if total_skipped:
+            print(f"Skipped (schema validation): {total_skipped}")
+        print(f"Manifest: {manifest_path}")
+        print("\nStart (or restart) the backend server — DuckDB views will cover the new data.")
+        print("The detection runner will fire on the next cycle (default: 5 min).")
+        all_rules = sorted({r for m in combined_manifest for r in m.get("expected_detections", [])})
+        if all_rules:
+            print(f"Expected alerts: {', '.join(all_rules)}")
+        return
+
+    # ------------------------------------------------------------------
+    # Single-table mode
+    # ------------------------------------------------------------------
+    if not args.table:
+        parser.error("--table is required unless --demo is specified")
 
     print(f"Generating {args.events} events for {args.table} (scenario: {args.scenario})...")
     events, manifest = generate(
@@ -1236,6 +1423,18 @@ def main():
         scenario=args.scenario,
         seed=args.seed,
     )
+
+    if args.to_storage:
+        written, skipped = _ingest_to_storage(events, args.table)
+        print(f"Written to storage: {written} events (skipped: {skipped})")
+        if manifest["mitre_techniques"]:
+            print(f"MITRE techniques: {', '.join(manifest['mitre_techniques'])}")
+        if manifest["expected_detections"]:
+            print(f"Expected alerts:  {', '.join(manifest['expected_detections'])}")
+        return
+
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     ts_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     jsonl_path = output_dir / f"{args.table}_{ts_str}.jsonl"
@@ -1248,7 +1447,7 @@ def main():
     with manifest_path.open("w") as f:
         json.dump(manifest, f, indent=2, default=str)
 
-    # Write Parquet
+    # Write Parquet to output dir
     try:
         import pandas as pd
         import pyarrow as pa
@@ -1257,7 +1456,7 @@ def main():
         parquet_path = output_dir / f"{args.table}_{ts_str}.parquet"
         df = pd.DataFrame(events)
         pq.write_table(pa.Table.from_pandas(df, preserve_index=False), str(parquet_path))
-        print(f"Parquet: {parquet_path}")
+        print(f"Parquet:  {parquet_path}")
     except ImportError:
         print("pyarrow not available — skipping Parquet output")
 
