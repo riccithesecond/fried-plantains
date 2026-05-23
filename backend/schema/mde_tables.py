@@ -25,6 +25,7 @@ class MdeTable:
     name: str                        # Exact MDE table name — PascalCase
     columns: tuple[MdeColumn, ...]   # Ordered tuple, not list — frozen dataclass requires it
     description: str                 # What log source this table represents in MDE
+    required_for_ingest: frozenset[str] = field(default_factory=frozenset)  # Columns that must be present (excl. ReportId — generated on default)
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +61,9 @@ _DEVICE_PROCESS_EVENTS = MdeTable(
         MdeColumn("InitiatingProcessSHA256",         "STRING",    False, "SHA-256 of the parent process binary"),
         MdeColumn("ReportId",                        "STRING",    False, "Unique event identifier"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "DeviceId", "DeviceName", "ActionType", "ReportId",
+    }),
 )
 
 _DEVICE_NETWORK_EVENTS = MdeTable(
@@ -83,6 +87,9 @@ _DEVICE_NETWORK_EVENTS = MdeTable(
         MdeColumn("InitiatingProcessSHA256",      "STRING",    False, "SHA-256 of initiating process"),
         MdeColumn("ReportId",                     "STRING",    False, "Unique event identifier"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "DeviceId", "DeviceName", "ActionType", "ReportId",
+    }),
 )
 
 _DEVICE_FILE_EVENTS = MdeTable(
@@ -105,6 +112,9 @@ _DEVICE_FILE_EVENTS = MdeTable(
         MdeColumn("InitiatingProcessSHA256",      "STRING",    False, "SHA-256 of initiating process"),
         MdeColumn("ReportId",                     "STRING",    False, "Unique event identifier"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "DeviceId", "DeviceName", "ActionType", "ReportId",
+    }),
 )
 
 _DEVICE_REGISTRY_EVENTS = MdeTable(
@@ -124,6 +134,9 @@ _DEVICE_REGISTRY_EVENTS = MdeTable(
         MdeColumn("InitiatingProcessId",          "INT",       False, "PID of initiating process"),
         MdeColumn("ReportId",                     "STRING",    False, "Unique event identifier"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "DeviceId", "DeviceName", "ActionType", "ReportId",
+    }),
 )
 
 _DEVICE_LOGON_EVENTS = MdeTable(
@@ -145,6 +158,9 @@ _DEVICE_LOGON_EVENTS = MdeTable(
         MdeColumn("RemoteDeviceName", "STRING",    True,  "Source device name"),              # -- nullable
         MdeColumn("ReportId",         "STRING",    False, "Unique event identifier"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "DeviceId", "DeviceName", "ActionType", "ReportId",
+    }),
 )
 
 _DEVICE_EVENTS = MdeTable(
@@ -167,6 +183,9 @@ _DEVICE_EVENTS = MdeTable(
         MdeColumn("InitiatingProcessId",          "INT",       False, "PID of initiating process"),
         MdeColumn("ReportId",                     "STRING",    False, "Unique event identifier"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "DeviceId", "DeviceName", "ActionType", "ReportId",
+    }),
 )
 
 _DEVICE_ALERT_EVENTS = MdeTable(
@@ -184,6 +203,9 @@ _DEVICE_ALERT_EVENTS = MdeTable(
         MdeColumn("AttackTechniques", "STRING[]",  False, "MITRE ATT&CK technique IDs"),
         MdeColumn("ReportId",         "STRING",    False, "Unique event identifier"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "DeviceId", "DeviceName", "AlertId", "Title", "Severity", "ReportId",
+    }),
 )
 
 _IDENTITY_LOGON_EVENTS = MdeTable(
@@ -208,6 +230,9 @@ _IDENTITY_LOGON_EVENTS = MdeTable(
         MdeColumn("Application",            "STRING",    True,  "Application context"),        # -- nullable
         MdeColumn("ReportId",               "STRING",    False, "Unique event identifier"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "AccountUpn", "ActionType", "ReportId",
+    }),
 )
 
 _CLOUD_APP_EVENTS = MdeTable(
@@ -229,6 +254,9 @@ _CLOUD_APP_EVENTS = MdeTable(
         MdeColumn("AdditionalFields",   "JSON",      False, "Event-specific structured fields"),
         MdeColumn("ReportId",           "STRING",    False, "Unique event identifier"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "Application", "ActionType", "AccountObjectId", "ReportId",
+    }),
 )
 
 _AWS_CLOUDTRAIL_EVENTS = MdeTable(
@@ -259,6 +287,9 @@ _AWS_CLOUDTRAIL_EVENTS = MdeTable(
         MdeColumn("SharedEventID",      "STRING",    True,  "Links cross-account delivery of the same event"),
         MdeColumn("AdditionalFields",   "JSON",      False, "Full raw CloudTrail event for full-fidelity querying"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "AccountId", "ActionType", "EventSource", "EventName", "ReportId",
+    }),
 )
 
 _CLOUDFLARE_HTTP_EVENTS = MdeTable(
@@ -299,6 +330,9 @@ _CLOUDFLARE_HTTP_EVENTS = MdeTable(
         MdeColumn("ZoneName",               "STRING",    True,  "Cloudflare zone (domain)"),
         MdeColumn("AdditionalFields",       "JSON",      False, "Full raw Cloudflare HTTP log entry"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "ReportId", "ActionType", "ClientIP", "ClientRequestHost",
+    }),
 )
 
 _CLOUDFLARE_FIREWALL_EVENTS = MdeTable(
@@ -327,6 +361,9 @@ _CLOUDFLARE_FIREWALL_EVENTS = MdeTable(
         MdeColumn("ZoneName",                "STRING",    True,  "Cloudflare zone (domain)"),
         MdeColumn("AdditionalFields",        "JSON",      False, "Full raw firewall event"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "ReportId", "ActionType", "ClientIP",
+    }),
 )
 
 _CLOUDFLARE_DNS_EVENTS = MdeTable(
@@ -358,6 +395,9 @@ _CLOUDFLARE_DNS_EVENTS = MdeTable(
         MdeColumn("Location",          "STRING",    True,  "Cloudflare Gateway location name"),
         MdeColumn("AdditionalFields",  "JSON",      False, "Full raw DNS log entry"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "ReportId", "ActionType", "SourceIP", "QueryName",
+    }),
 )
 
 _ZSCALER_WEB_EVENTS = MdeTable(
@@ -401,6 +441,9 @@ _ZSCALER_WEB_EVENTS = MdeTable(
         MdeColumn("DurationMs",           "INT",       True,  "Session duration in milliseconds"),
         MdeColumn("AdditionalFields",     "JSON",      False, "Full raw Zscaler web log entry"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "ReportId", "ActionType", "ClientIP", "UserName",
+    }),
 )
 
 _ZSCALER_DNS_EVENTS = MdeTable(
@@ -428,6 +471,9 @@ _ZSCALER_DNS_EVENTS = MdeTable(
         MdeColumn("DoHStatus",       "BOOLEAN",   True,  "True if DNS-over-HTTPS was used"),
         MdeColumn("AdditionalFields","JSON",      False, "Full raw Zscaler DNS log entry"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "ReportId", "ActionType", "ClientIP", "QueryName",
+    }),
 )
 
 _PROOFPOINT_MESSAGE_EVENTS = MdeTable(
@@ -473,6 +519,10 @@ _PROOFPOINT_MESSAGE_EVENTS = MdeTable(
         MdeColumn("SPF",                    "STRING",    False, "pass | fail | softfail | none"),
         MdeColumn("AdditionalFields",       "JSON",      False, "Full raw Proofpoint TAP message event"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "ReportId", "NetworkMessageId", "ActionType",
+        "SenderFromAddress", "RecipientEmailAddress",
+    }),
 )
 
 _PROOFPOINT_CLICK_EVENTS = MdeTable(
@@ -498,6 +548,10 @@ _PROOFPOINT_CLICK_EVENTS = MdeTable(
         MdeColumn("CampaignId",            "STRING",    True,  "Proofpoint campaign identifier if clustered"),            # -- nullable
         MdeColumn("AdditionalFields",      "JSON",      False, "Full raw Proofpoint TAP click event"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "ReportId", "NetworkMessageId", "ActionType",
+        "RecipientEmailAddress", "Url",
+    }),
 )
 
 _ABNORMAL_THREAT_EVENTS = MdeTable(
@@ -537,6 +591,9 @@ _ABNORMAL_THREAT_EVENTS = MdeTable(
         MdeColumn("CampaignId",            "STRING",    True,  "Abnormal campaign identifier if clustered"),              # -- nullable
         MdeColumn("AdditionalFields",      "JSON",      False, "Full raw Abnormal threat payload"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "ReportId", "ActionType", "SenderFromAddress", "RecipientEmailAddress",
+    }),
 )
 
 _ABNORMAL_CASE_EVENTS = MdeTable(
@@ -560,6 +617,9 @@ _ABNORMAL_CASE_EVENTS = MdeTable(
         MdeColumn("ResolutionReason",       "STRING",    True,  "Resolution notes or reason when case is closed"),        # -- nullable
         MdeColumn("AdditionalFields",       "JSON",      False, "Full raw Abnormal case payload"),
     ),
+    required_for_ingest=frozenset({
+        "Timestamp", "ReportId", "ActionType",
+    }),
 )
 
 
@@ -836,6 +896,9 @@ def _validate_registry() -> None:
             f"{table_name} missing ReportId column"
         assert len(column_names) == len(set(column_names)), \
             f"{table_name} has duplicate column names: {column_names}"
+        for req_col in table.required_for_ingest:
+            assert req_col in column_names, \
+                f"{table_name}.required_for_ingest references unknown column: {req_col}"
 
     for table_name in ACTION_TYPES:
         assert table_name in MDE_TABLES, \

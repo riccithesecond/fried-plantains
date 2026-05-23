@@ -19,6 +19,7 @@ class Alert(BaseModel):
     triggered_at: datetime
     event_count: int
     sample_event_ids: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
     status: Literal["open", "investigating", "closed"] = "open"
     notes: str = ""
 

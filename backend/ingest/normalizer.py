@@ -21,9 +21,6 @@ from backend.schema.mde_tables import MDE_TABLES, MdeTable, get_column_names
 
 logger = logging.getLogger(__name__)
 
-# Columns that are required (non-nullable) in every table
-_ALWAYS_REQUIRED = {"Timestamp", "DeviceId", "DeviceName", "ActionType", "ReportId"}
-
 
 def normalize(raw_event: dict[str, Any], target_table: str) -> dict[str, Any]:
     """Map a raw event dict to the target MDE table schema.
@@ -165,16 +162,11 @@ def _to_timestamp(value: Any) -> datetime:
 
 
 def _check_required(event: dict[str, Any], table: MdeTable) -> list[str]:
-    """Return core identification columns that are absent from the event.
+    """Return required ingest columns that are absent from the event.
 
-    Only enforces _ALWAYS_REQUIRED columns that exist in the table schema.
-    Raw events from diverse log sources are routinely partial — other non-nullable
-    columns are filled with None rather than causing a rejection.
-    ReportId is excluded because normalize() generates a default.
+    Uses table.required_for_ingest (defined per-table in mde_tables.py) so
+    device-centric defaults don't wrongly apply to identity or cloud tables.
+    ReportId is excluded because normalize() generates a default value.
     """
-    required = {
-        c.name for c in table.columns
-        if c.name in _ALWAYS_REQUIRED and not c.nullable
-    }
-    required.discard("ReportId")
+    required = table.required_for_ingest - {"ReportId"}
     return [name for name in required if name not in event]

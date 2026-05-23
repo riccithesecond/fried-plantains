@@ -20,11 +20,11 @@ from pathlib import Path
 
 import yaml
 
-from backend.api.alerts import append_alert, _load_all_alerts
 from backend.engine.duckdb_pool import get_pool
 from backend.engine.query_router import route
 from backend.exceptions import QueryException
 from backend.models.alert import Alert
+from backend.services.alert_store import append_alert, load_all_alerts
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def _load_enabled_rules() -> list[dict]:
 def _has_open_alert(rule_id: str) -> bool:
     """Return True if an open alert for this rule exists within the dedup window."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=_DEDUP_WINDOW_HOURS)
-    for alert in _load_all_alerts():
+    for alert in load_all_alerts():
         if (
             alert.rule_id == rule_id
             and alert.status == "open"
@@ -94,9 +94,10 @@ async def run_detection_cycle() -> None:
                 triggered_at=datetime.now(timezone.utc),
                 event_count=len(rows),
                 sample_event_ids=sample_ids,
+                tags=rule.get("tags", []),
                 status="open",
             )
-            append_alert(alert)
+            append_alert(alert, match_rows=rows)
             logger.warning(
                 "ALERT: rule=%s name=%r severity=%s matches=%d",
                 rule_id,
