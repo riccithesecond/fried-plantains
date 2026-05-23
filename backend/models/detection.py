@@ -22,7 +22,7 @@ from backend.exceptions import QueryException
 class DetectionRule(BaseModel):
     """Complete detection rule schema."""
 
-    id: str = Field(pattern=r"^FP-\d{4}$", description="Rule ID in FP-XXXX format")
+    id: str = Field(pattern=r"^(FP|SYN)-\d{4}$", description="Rule ID — FP-XXXX (production) or SYN-XXXX (synthetic test)")
     name: str = Field(min_length=5, max_length=200)
     description: str
     severity: str = Field(pattern=r"^(info|low|medium|high|critical)$")
@@ -30,6 +30,7 @@ class DetectionRule(BaseModel):
     query: str
     tags: list[str] = Field(default_factory=list)
     mde_portable: bool = False
+    synthetic: bool = False
     enabled: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

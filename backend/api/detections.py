@@ -1,10 +1,13 @@
 """
 api/detections.py — Detection rule CRUD endpoints.
 
-Rules are stored as YAML files in detections/rules/{id}.yaml. This makes them:
-  - Version-controllable: git diff shows exactly what changed
-  - Portable: copy the YAML to Microsoft Sentinel as an Analytic Rule
-  - Inspectable: a DFIR analyst can read the rule without a GUI
+Rules are stored as YAML files under detections/rules/:
+  - detections/rules/FP-XXXX.yaml       — production rules (threat-intel / hypothesis-driven)
+  - detections/rules/synthetic/SYN-XXXX.yaml — synthetic test rules keyed to generate_logs.py
+
+This layout makes rules version-controllable, portable to Sentinel/MDE, and inspectable
+without a GUI. SYN-* rules are read-only from the API perspective — they are managed
+alongside generate_logs.py, not through the CRUD endpoints.
 
 Rule IDs are auto-incremented: FP-0001, FP-0002, etc.
 Deletion is soft — rules are disabled (enabled: false) and marked archived.
@@ -43,6 +46,8 @@ def _rules_dir() -> Path:
 
 
 def _rule_path(rule_id: str) -> Path:
+    if rule_id.startswith("SYN-"):
+        return _RULES_DIR / "synthetic" / f"{rule_id}.yaml"
     return _rules_dir() / f"{rule_id}.yaml"
 
 
@@ -92,6 +97,12 @@ def _list_all_rules() -> list[DetectionRule]:
         rule = _load_rule(path.stem)
         if rule is not None:
             rules.append(rule)
+    synthetic_dir = _RULES_DIR / "synthetic"
+    if synthetic_dir.exists():
+        for path in sorted(synthetic_dir.glob("SYN-*.yaml")):
+            rule = _load_rule(path.stem)
+            if rule is not None:
+                rules.append(rule)
     return rules
 
 
