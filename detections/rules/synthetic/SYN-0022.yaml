@@ -1,0 +1,30 @@
+id: SYN-0022
+synthetic: true
+name: Abnormal Security — high-severity case opened
+severity: high
+language: kql
+mde_portable: false
+query: |
+  AbnormalCaseEvents
+  | where Timestamp > ago(1h)
+  | where ActionType == "CaseOpened"
+  | where CaseSeverity == "High"
+  | project Timestamp, ReportId, CaseType, CaseSeverity, CaseStatus,
+            ThreatCount, AffectedEmployeeCount, AffectedAccountCount,
+            FirstObservedTimestamp, LastObservedTimestamp,
+            RemediationStatus, AnalystAssigned
+  | order by ThreatCount desc
+tags:
+  - T1566
+  - T1078
+  - incident-response
+  - case-management
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  High-severity Abnormal cases aggregate multiple related threats and are opened only
+  when Abnormal's AI clusters a campaign. Cases are not individual detections —
+  they represent an ongoing attack pattern. Escalate immediately. Use ThreatCount
+  and AffectedAccountCount to scope the incident before triaging individual threats.

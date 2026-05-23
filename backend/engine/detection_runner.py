@@ -34,18 +34,29 @@ _DEDUP_WINDOW_HOURS = 1
 
 
 def _load_enabled_rules() -> list[dict]:
-    """Load all enabled YAML rules from disk."""
+    """Load all enabled YAML rules from disk.
+
+    Loads from two locations:
+      detections/rules/FP-*.yaml        — production rules (threat-intel / hypothesis-driven)
+      detections/rules/synthetic/*.yaml — synthetic test rules keyed to generated log scenarios
+    Rules are sorted by ID so execution order is deterministic.
+    """
     rules = []
-    if not _RULES_DIR.exists():
-        return rules
-    for path in sorted(_RULES_DIR.glob("FP-*.yaml")):
-        try:
-            with path.open() as f:
-                rule = yaml.safe_load(f)
-            if rule.get("enabled", True):
-                rules.append(rule)
-        except Exception as exc:
-            logger.error("Failed to load rule %s: %s", path.name, exc)
+    patterns = [
+        (_RULES_DIR, "FP-*.yaml"),
+        (_RULES_DIR / "synthetic", "SYN-*.yaml"),
+    ]
+    for directory, glob_pattern in patterns:
+        if not directory.exists():
+            continue
+        for path in sorted(directory.glob(glob_pattern)):
+            try:
+                with path.open() as f:
+                    rule = yaml.safe_load(f)
+                if rule.get("enabled", True):
+                    rules.append(rule)
+            except Exception as exc:
+                logger.error("Failed to load rule %s: %s", path.name, exc)
     return rules
 
 

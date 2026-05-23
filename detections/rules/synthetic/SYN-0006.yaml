@@ -1,0 +1,37 @@
+id: SYN-0006
+synthetic: true
+name: certutil.exe downloading file from internet (T1105)
+description: >
+  Detects certutil.exe being used to download files from external URLs. certutil is
+  a legitimate Windows certificate utility that supports Base64 encoding/decoding and
+  file download via -urlcache. It is heavily abused by threat actors to bypass network
+  controls and download malicious payloads because it is a signed Windows binary.
+severity: high
+language: kql
+query: |
+  DeviceProcessEvents
+  | where Timestamp > ago(1h)
+  | where FileName =~ "certutil.exe"
+  | where ProcessCommandLine contains "-urlcache"
+      or ProcessCommandLine contains "-decode"
+      or ProcessCommandLine contains "-encode"
+      or ProcessCommandLine contains "http"
+  | project Timestamp, DeviceName, AccountName, ProcessCommandLine,
+            InitiatingProcessFileName, InitiatingProcessCommandLine,
+            InitiatingProcessAccountName, SHA256
+  | order by Timestamp desc
+tags:
+  - T1105
+  - T1027
+  - command-and-control
+  - defense-evasion
+mde_portable: true
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  Legitimate PKI operations (certificate enrollment, CRL checking) use certutil
+  without -urlcache. The -urlcache and http URL flags are the key indicators —
+  legitimate certutil use rarely combines these. Windows Update and WSUS operations
+  do not use certutil for downloads.

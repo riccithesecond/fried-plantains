@@ -91,7 +91,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "encoded-powershell": {
         "table": "DeviceProcessEvents",
         "mitre": ["T1059.001"],
-        "detection_rules": ["FP-0001"],
+        "detection_rules": ["SYN-0001"],
         "events": [
             {
                 "FileName": "powershell.exe",
@@ -119,7 +119,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "lsass-dump": {
         "table": "DeviceProcessEvents",
         "mitre": ["T1003.001"],
-        "detection_rules": ["FP-0002"],
+        "detection_rules": ["SYN-0002"],
         "events": [
             {
                 "FileName": "lsass.exe",
@@ -142,7 +142,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "registry-persistence": {
         "table": "DeviceRegistryEvents",
         "mitre": ["T1547.001"],
-        "detection_rules": ["FP-0004"],
+        "detection_rules": ["SYN-0004"],
         "events": [
             {
                 "ActionType": "RegistryValueSet",
@@ -157,7 +157,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "lateral-movement": {
         "table": "DeviceNetworkEvents",
         "mitre": ["T1021", "T1570"],
-        "detection_rules": ["FP-0007"],
+        "detection_rules": ["SYN-0007"],
         "events": [
             {
                 "ActionType": "ConnectionSuccess",
@@ -175,7 +175,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "certutil-download": {
         "table": "DeviceProcessEvents",
         "mitre": ["T1105", "T1027"],
-        "detection_rules": ["FP-0006"],
+        "detection_rules": ["SYN-0006"],
         "events": [
             {
                 "FileName": "certutil.exe",
@@ -190,7 +190,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "brute-force": {
         "table": "DeviceLogonEvents",
         "mitre": ["T1110", "T1078"],
-        "detection_rules": ["FP-0005"],
+        "detection_rules": ["SYN-0005"],
         "events": [
             {
                 "ActionType": "LogonFailed",
@@ -210,7 +210,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "aws-root-usage": {
         "table": "AWSCloudTrailEvents",
         "mitre": ["T1078.004"],
-        "detection_rules": ["FP-0008"],
+        "detection_rules": ["SYN-0008"],
         "events": [
             {
                 "AccountId": "123456789012",
@@ -247,7 +247,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "aws-cloudtrail-disable": {
         "table": "AWSCloudTrailEvents",
         "mitre": ["T1562.008"],
-        "detection_rules": ["FP-0009"],
+        "detection_rules": ["SYN-0009"],
         "events": [
             {
                 "AccountId": "123456789012",
@@ -284,7 +284,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "aws-iam-escalation": {
         "table": "AWSCloudTrailEvents",
         "mitre": ["T1098", "T1136.003"],
-        "detection_rules": ["FP-0010"],
+        "detection_rules": ["SYN-0010"],
         "events": [
             {
                 "AccountId": "123456789012",
@@ -329,7 +329,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "cloudflare-waf-spike": {
         "table": "CloudflareFirewallEvents",
         "mitre": ["T1190"],
-        "detection_rules": ["FP-0011"],
+        "detection_rules": ["SYN-0011"],
         "events": [
             {
                 "ActionType": "WAFBlock",
@@ -348,7 +348,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "cloudflare-dns-threat": {
         "table": "CloudflareDnsEvents",
         "mitre": ["T1071.004"],
-        "detection_rules": ["FP-0012"],
+        "detection_rules": ["SYN-0012"],
         "events": [
             {
                 "ActionType": "DnsThreatMatch",
@@ -368,7 +368,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "zscaler-malware-download": {
         "table": "ZscalerWebEvents",
         "mitre": ["T1105"],
-        "detection_rules": ["FP-0013"],
+        "detection_rules": ["SYN-0013"],
         "events": [
             {
                 "ActionType": "MalwareDetected",
@@ -391,7 +391,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "zscaler-dlp": {
         "table": "ZscalerWebEvents",
         "mitre": ["T1048"],
-        "detection_rules": ["FP-0014"],
+        "detection_rules": ["SYN-0014"],
         "events": [
             {
                 "ActionType": "DlpViolation",
@@ -412,7 +412,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "zscaler-dns-sinkhole": {
         "table": "ZscalerDnsEvents",
         "mitre": ["T1071.004"],
-        "detection_rules": ["FP-0015"],
+        "detection_rules": ["SYN-0015"],
         "events": [
             {
                 "ActionType": "DnsSinkhole",
@@ -433,7 +433,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "proofpoint-phish-verymalicious": {
         "table": "ProofpointMessageEvents",
         "mitre": ["T1566.001"],
-        "detection_rules": ["FP-0016"],
+        "detection_rules": ["SYN-0016"],
         "events": [
             {
                 "NetworkMessageId": "phish-inv-8821@micros0ft-billing.com",
@@ -478,7 +478,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "proofpoint-impostor-delivered": {
         "table": "ProofpointMessageEvents",
         "mitre": ["T1566.001", "T1534"],
-        "detection_rules": ["FP-0017"],
+        "detection_rules": ["SYN-0017"],
         "events": [
             {
                 "NetworkMessageId": "impostor-ceo-q1@corp-corp.com",
@@ -523,7 +523,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "proofpoint-malware-sandbox": {
         "table": "ProofpointMessageEvents",
         "mitre": ["T1566.001", "T1059"],
-        "detection_rules": ["FP-0018"],
+        "detection_rules": ["SYN-0018"],
         "events": [
             {
                 "NetworkMessageId": "malware-contract-docusign@legit-looking.net",
@@ -568,7 +568,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "proofpoint-click-blocked": {
         "table": "ProofpointClickEvents",
         "mitre": ["T1566.002", "T1204.001"],
-        "detection_rules": ["FP-0019"],
+        "detection_rules": ["SYN-0019"],
         "events": [
             {
                 "NetworkMessageId": "click-phish-evil@evil-domain.xyz",
@@ -596,7 +596,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "abnormal-bec-vip": {
         "table": "AbnormalThreatEvents",
         "mitre": ["T1566.001", "T1534"],
-        "detection_rules": ["FP-0020"],
+        "detection_rules": ["SYN-0020"],
         "events": [
             {
                 "ActionType": "ThreatDetected",
@@ -634,9 +634,9 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "abnormal-cross-layer-phish": {
         "table": "AbnormalThreatEvents",
         "mitre": ["T1566.001", "T1566.002"],
-        "detection_rules": ["FP-0021"],
+        "detection_rules": ["SYN-0021"],
         "events": [
-            # Abnormal detection for same message that Proofpoint also blocked (FP-0021 join)
+            # Abnormal detection for same message that Proofpoint also blocked (SYN-0021 join)
             {
                 "NetworkMessageId": "cross-layer-msg-001@corp.com",
                 "ActionType": "ThreatDetected",
@@ -674,7 +674,7 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
     "abnormal-case-high-severity": {
         "table": "AbnormalCaseEvents",
         "mitre": ["T1566", "T1078"],
-        "detection_rules": ["FP-0022"],
+        "detection_rules": ["SYN-0022"],
         "events": [
             {
                 "ActionType": "CaseOpened",

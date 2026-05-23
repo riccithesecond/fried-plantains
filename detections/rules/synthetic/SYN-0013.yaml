@@ -1,0 +1,25 @@
+id: SYN-0013
+synthetic: true
+name: Zscaler detected malware in web transaction
+severity: critical
+language: kql
+mde_portable: false
+query: |
+  ZscalerWebEvents
+  | where Timestamp > ago(1h)
+  | where ActionType in ("MalwareDetected", "QuarantinedFile")
+  | project Timestamp, UserName, Department, Location, ClientIP,
+            RequestURL, FileName, MalwareName, MalwareClass,
+            FileSHA256, PolicyName
+  | order by Timestamp desc
+tags:
+  - T1105
+  - execution
+  - initial-access
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  Validate SHA256 against VirusTotal. May be a false positive on legitimate
+  security tools (e.g. nmap, Metasploit installers flagged by heuristics).

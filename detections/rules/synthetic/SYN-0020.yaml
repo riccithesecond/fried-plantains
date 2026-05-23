@@ -1,0 +1,31 @@
+id: SYN-0020
+synthetic: true
+name: Abnormal Security — BEC or impostor threat detected
+severity: high
+language: kql
+mde_portable: false
+query: |
+  AbnormalThreatEvents
+  | where Timestamp > ago(1h)
+  | where ActionType == "ThreatDetected"
+  | where AttackType in ("BEC", "SocialEngineering", "AccountTakeover")
+  | where AbNormalScore > 0.85
+  | project Timestamp, SenderFromAddress, SenderFromDomain, SenderDisplayName,
+            RecipientEmailAddress, RecipientName, RecipientIsVIP,
+            ImpersonatedParty, ImpersonatedEmail, Subject,
+            AttackType, AttackStrategy, AbNormalScore,
+            SuspiciousContent, RemediationStatus, NetworkMessageId
+  | order by AbNormalScore desc
+tags:
+  - T1566.001
+  - T1534
+  - business-email-compromise
+  - social-engineering
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  Abnormal scores above 0.85 are high-confidence detections. VIP recipient flag
+  elevates urgency. Check ImpersonatedParty — executive impersonation combined with
+  a VIP target is a strong BEC indicator. Verify if the recipient responded.

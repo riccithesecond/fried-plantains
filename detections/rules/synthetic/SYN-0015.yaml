@@ -1,0 +1,23 @@
+id: SYN-0015
+synthetic: true
+name: Zscaler DNS sinkhole — active C2 communication attempt
+severity: critical
+language: kql
+mde_portable: false
+query: |
+  ZscalerDnsEvents
+  | where Timestamp > ago(1h)
+  | where ActionType == "DnsSinkhole"
+  | project Timestamp, UserName, Department, Location, ClientIP,
+            QueryName, ThreatName, ThreatCategory, PolicyName
+  | order by Timestamp desc
+tags:
+  - T1071.004
+  - command-and-control
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  Sinkhole hits are high fidelity. Treat as confirmed C2 attempt unless proven
+  otherwise. Isolate the endpoint immediately and open an incident.

@@ -1,0 +1,37 @@
+id: SYN-0004
+synthetic: true
+name: Registry run key persistence mechanism
+description: >
+  Detects writes to common persistence registry run keys (HKCU and HKLM Run/RunOnce).
+  These keys execute registered programs at user logon or system startup and are
+  a primary persistence technique used by malware, RATs, and post-exploitation frameworks.
+  Any unexpected entry here warrants investigation.
+severity: medium
+language: kql
+query: |
+  DeviceRegistryEvents
+  | where Timestamp > ago(1h)
+  | where ActionType in ("RegistryValueSet", "RegistryKeyCreated")
+  | where RegistryKey has "\\CurrentVersion\\Run"
+      or RegistryKey has "\\CurrentVersion\\RunOnce"
+  | where RegistryKey has "HKEY_CURRENT_USER" or RegistryKey has "HKEY_LOCAL_MACHINE"
+  | where InitiatingProcessFileName !in~ ("MsiExec.exe", "setup.exe", "installer.exe",
+      "msiexec.exe", "WindowsInstaller.exe")
+  | project Timestamp, DeviceName, RegistryKey, RegistryValueName, RegistryValueData,
+            InitiatingProcessFileName, InitiatingProcessCommandLine,
+            InitiatingProcessAccountName
+  | order by Timestamp desc
+tags:
+  - T1547.001
+  - persistence
+  - privilege-escalation
+mde_portable: true
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  Legitimate software installers frequently write to Run keys. Suppressing MsiExec
+  and common installer names reduces FP rate. Verify RegistryValueData — legitimate
+  entries point to known application paths. Paths containing %TEMP% or %APPDATA%
+  with executable names are suspicious.

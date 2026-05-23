@@ -1,0 +1,29 @@
+id: SYN-0017
+synthetic: true
+name: Proofpoint — impostor email delivered (BEC precursor)
+severity: high
+language: kql
+mde_portable: false
+query: |
+  ProofpointMessageEvents
+  | where Timestamp > ago(1h)
+  | where ActionType == "Delivered"
+  | where ImpostorScore > 90
+  | project Timestamp, SenderFromAddress, SenderFromDomain, SenderIP,
+            RecipientEmailAddress, Subject, ImpostorScore,
+            PhishVerdict, DKIM, DMARC, SPF, NetworkMessageId
+  | order by ImpostorScore desc
+tags:
+  - T1566.001
+  - T1534
+  - business-email-compromise
+  - initial-access
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  High impostor scores on delivered messages are high-risk BEC precursors.
+  Check if the recipient replied or forwarded the message. Verify whether the
+  sender domain is a look-alike (e.g., micros0ft.com vs microsoft.com).
+  DKIM/DMARC/SPF failures alongside high impostor score are strong indicators.
