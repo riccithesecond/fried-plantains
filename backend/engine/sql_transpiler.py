@@ -25,6 +25,50 @@ logger = logging.getLogger(__name__)
 _VALID_TABLES: frozenset[str] = frozenset(MDE_TABLES.keys())
 
 
+# ---------------------------------------------------------------------------
+# Coverage — portfolio artifact: engineering honesty about what's implemented
+# ---------------------------------------------------------------------------
+
+COVERAGE: dict[str, str] = {
+    # --- Supported: SELECT capabilities ---
+    "SELECT (columns, aliases, expressions)": "supported — passed through after validation",
+    "WHERE (all comparison operators)": "supported",
+    "GROUP BY + aggregation functions": "supported — COUNT, SUM, AVG, MIN, MAX, COUNT(DISTINCT)",
+    "ORDER BY ASC/DESC": "supported",
+    "LIMIT / OFFSET": "supported",
+    "JOIN (INNER, LEFT, RIGHT, FULL OUTER, CROSS)": "supported — DuckDB handles all join types",
+    "UNION / UNION ALL / INTERSECT / EXCEPT": "supported",
+    "CTEs (WITH ... AS)": "supported — CTE aliases are validated as in-query tables",
+    "Subqueries (correlated and uncorrelated)": "supported",
+    "Window functions (ROW_NUMBER, RANK, LAG, LEAD, etc.)": "supported — DuckDB native",
+    "CASE WHEN ... THEN ... END": "supported",
+    "CAST / type coercion": "supported",
+    "String functions (LIKE, ILIKE, regexp_matches, etc.)": "supported — DuckDB native",
+    "JSON access (json_extract, json_extract_string)": "supported — for AdditionalFields column",
+    "Date/time functions (date_trunc, date_diff, NOW, etc.)": "supported — DuckDB native",
+    "ARRAY / LIST functions (list_contains, unnest, etc.)": "supported — DuckDB native",
+    "Lateral joins": "supported — DuckDB LATERAL keyword",
+    "DISTINCT": "supported",
+    "QUALIFY (window filter)": "supported — DuckDB extension",
+
+    # --- Blocked: write operations ---
+    "INSERT / UPDATE / DELETE": "blocked — pre-parse keyword guard + sqlglot AST check",
+    "DROP / CREATE / ALTER": "blocked — pre-parse keyword guard + sqlglot AST check",
+    "EXEC / EXECUTE / PRAGMA": "blocked — pre-parse keyword guard",
+    "SELECT INTO OUTFILE": "blocked — pre-parse keyword guard (data exfiltration pattern)",
+    "Multiple statements (stacked queries)": "blocked — single-statement enforcement via sqlglot",
+
+    # --- Blocked: unknown table references ---
+    "Unknown table references": "blocked — all table names validated against MDE_TABLES registry",
+    "Case-variant table names (deviceprocessevents)": "blocked — MDE names are case-sensitive",
+
+    # --- Planned ---
+    "Row-level security (per-user table filtering)": "planned — not in MVP",
+    "Query cost estimation / row limit enforcement": "planned — currently timeout-only",
+    "Column-level access control": "planned — not in MVP",
+}
+
+
 class SqlValidator:
     """Validate and pass through SQL to DuckDB."""
 
