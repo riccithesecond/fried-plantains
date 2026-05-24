@@ -35,23 +35,63 @@ Detection rules written here targeting MDE native tables are portable to real MD
 
 ## Getting started
 
-**Backend**
+**Prerequisites:** Python 3.11+, Node 18+
+
+**1. Clone and configure**
 
 ```bash
-pip install -r backend/requirements.txt
-cp .env.example .env   # fill in secrets
-uvicorn backend.main:app --reload
+git clone https://github.com/riccithesecond/fried-plantains.git
+cd fried-plantains
+cp .env.example .env
 ```
 
-**Frontend**
+Edit `.env` and set three required values:
 
 ```bash
-cd frontend
-npm install
-npm run dev
+# Generate a random secret key
+openssl rand -hex 32
+
+# Generate a bcrypt password hash
+python3 -c "from passlib.hash import bcrypt; print(bcrypt.hash('yourpassword'))"
 ```
 
-The API runs on `http://localhost:8000` and the UI on `http://localhost:5173` by default.
+**2. Install dependencies**
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r backend/requirements.txt   # macOS/Linux
+# or
+python -m venv .venv
+.venv\Scripts\pip install -r backend\requirements.txt   # Windows
+```
+
+**3. Launch**
+
+```bash
+# macOS / Linux
+./start.sh
+
+# Windows
+.\start.ps1
+```
+
+The launcher seeds demo data automatically on first run (29 synthetic detection rules, 8 attack scenarios across 33 MDE tables), then starts both servers. The UI opens at `http://localhost:5173`.
+
+| Endpoint | URL |
+|---|---|
+| Frontend | http://localhost:5173 |
+| Backend API | http://localhost:8000 |
+| API docs (Swagger) | http://localhost:8000/docs |
+
+**Manual startup** (if you prefer separate terminals)
+
+```bash
+# Terminal 1 — backend
+.venv/bin/uvicorn backend.main:app --reload
+
+# Terminal 2 — frontend
+cd frontend && npm install && npm run dev
+```
 
 ---
 
