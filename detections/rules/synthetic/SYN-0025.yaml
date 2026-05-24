@@ -1,0 +1,29 @@
+id: SYN-0025
+synthetic: true
+name: MDO — malicious attachment identified by Safe Attachments
+severity: critical
+language: kql
+mde_portable: true
+query: |
+  EmailAttachmentInfo
+  | where Timestamp > ago(1h)
+  | where isnotempty(MalwareFamily) or ThreatTypes has "Malware"
+  | project Timestamp, NetworkMessageId, SenderFromAddress, RecipientEmailAddress,
+            FileName, FileType, SHA256, MalwareFamily,
+            ThreatNames, ThreatTypes, DetectionMethods
+  | order by Timestamp desc
+tags:
+  - T1566.001
+  - malware
+  - phishing
+  - email
+  - mdo
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  SHA256 from this table joins directly to DeviceFileEvents — if the attachment
+  SHA256 appears on an endpoint, the malware was likely executed. Join to
+  EmailEvents on NetworkMessageId to determine if the message was quarantined
+  or delivered before MDO identified the attachment as malicious.

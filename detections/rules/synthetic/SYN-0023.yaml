@@ -1,0 +1,33 @@
+id: SYN-0023
+synthetic: true
+name: Unsigned DLL loaded from user-writable path (DLL hijacking)
+severity: high
+language: kql
+mde_portable: true
+query: |
+  DeviceImageLoadEvents
+  | where Timestamp > ago(1h)
+  | where ActionType == "ImageLoaded"
+  | where IsSigned == false or IsCodeSigningCertValid == false
+  | where FolderPath has_any ("AppData", "Temp", "ProgramData")
+      and not(FolderPath startswith "C:\\Windows\\")
+      and not(FolderPath startswith "C:\\Program Files")
+  | project Timestamp, DeviceName, FileName, FolderPath, SHA256,
+            IsSigned, IsCodeSigningCertValid, Signer, Issuer,
+            InitiatingProcessFileName, InitiatingProcessCommandLine,
+            InitiatingProcessAccountName, InitiatingProcessId
+  | order by Timestamp desc
+tags:
+  - T1574.001
+  - T1574.002
+  - dll-hijacking
+  - defense-evasion
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  Software installers may briefly load unsigned DLLs from Temp during setup.
+  Check InitiatingProcessFileName — installers (msiexec.exe, setup.exe) are
+  lower confidence than productivity apps (teams.exe, outlook.exe). Verify
+  FileName against known DLL hijacking targets (cryptbase.dll, version.dll).

@@ -1,0 +1,29 @@
+id: SYN-0026
+synthetic: true
+name: MDO — Zero-hour Auto Purge (ZAP) retroactively deleted a delivered message
+severity: medium
+language: kql
+mde_portable: true
+query: |
+  EmailPostDeliveryEvents
+  | where Timestamp > ago(1h)
+  | where ActionType == "ZAP"
+  | where ActionResult == "Success"
+  | project Timestamp, NetworkMessageId, SenderFromAddress, RecipientEmailAddress,
+            Action, ActionType, ActionTrigger, ActionResult, DeliveryLocation
+  | order by Timestamp desc
+tags:
+  - T1566.001
+  - email
+  - mdo
+  - zap
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  ZAP fires when MDO reclassifies a message after delivery — this is always a
+  true positive indicator that a threat was initially missed. The key triage
+  question is whether the recipient interacted with the message before ZAP fired.
+  Check UrlClickEvents on NetworkMessageId for any clicks between DeliveryTimestamp
+  and Timestamp.

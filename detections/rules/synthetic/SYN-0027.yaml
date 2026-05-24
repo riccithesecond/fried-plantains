@@ -1,0 +1,32 @@
+id: SYN-0027
+synthetic: true
+name: MDO Safe Links — user clicked a blocked phishing or malware URL
+severity: high
+language: kql
+mde_portable: true
+query: |
+  UrlClickEvents
+  | where Timestamp > ago(1h)
+  | where ActionType in ("ClickBlocked", "ClickBlockedByTenantAdmin")
+  | where ThreatTypes has "Phish" or ThreatTypes has "Malware"
+  | project Timestamp, AccountUpn, Url, ActionType, NetworkMessageId,
+            Workload, IPAddress, IsClickedThrough,
+            ThreatTypes, DetectionMethods
+  | order by Timestamp desc
+tags:
+  - T1566.002
+  - T1204.001
+  - phishing
+  - url-click
+  - mdo
+  - safe-links
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  Safe Links blocks are always intentional — a blocked click means the user
+  attempted to visit a known-bad URL. Check IsClickedThrough: if True, the
+  user bypassed the warning page, which is high priority. Join to EmailEvents
+  on NetworkMessageId to understand the delivery context. DeviceLogonEvents
+  and DeviceNetworkEvents in the same time window can reveal post-click activity.

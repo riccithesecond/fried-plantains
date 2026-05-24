@@ -1,0 +1,37 @@
+id: SYN-0029
+synthetic: true
+name: LDAP reconnaissance — high-volume LDAP enumeration from a single host
+severity: medium
+language: kql
+mde_portable: false
+query: |
+  IdentityQueryEvents
+  | where Timestamp > ago(1h)
+  | where ActionType == "LdapSearch"
+  | summarize QueryCount = count(),
+              DistinctTargets = dcount(QueryTarget),
+              FirstSeen = min(Timestamp),
+              LastSeen = max(Timestamp)
+      by AccountUpn, AccountName, AccountDomain, DeviceName, IPAddress,
+         bin(Timestamp, 5m)
+  | where QueryCount > 30
+  | extend DurationMinutes = datetime_diff('minute', LastSeen, FirstSeen)
+  | project Timestamp, AccountUpn, AccountName, AccountDomain,
+            DeviceName, IPAddress, QueryCount, DistinctTargets, DurationMinutes
+  | order by QueryCount desc
+tags:
+  - T1087.002
+  - T1069.002
+  - ldap-enumeration
+  - reconnaissance
+  - identity
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  Legitimate IT tooling (AD Connect sync, vulnerability scanners, SCCM) can
+  generate high LDAP volume. Verify AccountUpn against known service accounts
+  and check if DeviceName is a management server. High DistinctTargets (many
+  different search bases) combined with a standard user account is the strongest
+  recon indicator. BloodHound/SharpHound generates >100 queries in seconds.

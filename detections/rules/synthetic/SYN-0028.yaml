@@ -1,0 +1,31 @@
+id: SYN-0028
+synthetic: true
+name: Active Directory — account added to privileged group or admin privilege granted
+severity: critical
+language: kql
+mde_portable: true
+query: |
+  IdentityDirectoryEvents
+  | where Timestamp > ago(1h)
+  | where ActionType in ("MemberAddedToGroup", "AdminPrivilegeGranted", "SensitiveGroupModified")
+  | project Timestamp, ActionType, Application, TargetAccountUpn,
+            TargetAccountDisplayName, AccountUpn, AccountName, AccountDomain,
+            DeviceName, IPAddress, DestinationDeviceName, Protocol,
+            AdditionalFields
+  | order by Timestamp desc
+tags:
+  - T1098
+  - T1078.002
+  - privilege-escalation
+  - active-directory
+  - identity
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  Legitimate IT operations add accounts to privileged groups. Key signals for
+  escalation: AccountUpn is a service account (svc_) rather than an IT admin,
+  the change occurred outside business hours, or the initiating device is a
+  workstation rather than a management server. Cross-reference with
+  IdentityLogonEvents to see if the granted account immediately logged on.

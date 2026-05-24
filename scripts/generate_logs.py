@@ -44,6 +44,7 @@ _DEVICE_TABLE_NAMES = frozenset({
     "DeviceRegistryEvents",
     "DeviceLogonEvents",
     "DeviceEvents",
+    "DeviceImageLoadEvents",  # device-centric event stream, same base as the others
 })
 
 # ---------------------------------------------------------------------------
@@ -694,6 +695,243 @@ _ATTACK_SCENARIOS: dict[str, dict[str, Any]] = {
             },
         ],
     },
+    # ------------------------------------------------------------------
+    # DeviceImageLoadEvents scenarios
+    # ------------------------------------------------------------------
+    "dll-hijacking": {
+        "table": "DeviceImageLoadEvents",
+        "mitre": ["T1574.001", "T1574.002"],
+        "detection_rules": ["SYN-0023"],
+        "events": [
+            {
+                "ActionType": "ImageLoaded",
+                "FileName": "cryptbase.dll",
+                "FolderPath": "C:\\Users\\jsmith\\AppData\\Local\\Temp\\cryptbase.dll",
+                "SHA1": "aa" * 20,
+                "SHA256": "aa" * 32,
+                "MD5": "aa" * 16,
+                "IsSigned": False,
+                "IsCodeSigningCertValid": None,
+                "Signer": None,
+                "SignerHash": None,
+                "Issuer": None,
+                "IssuerHash": None,
+                "InitiatingProcessFileName": "teams.exe",
+                "InitiatingProcessCommandLine": '"C:\\Users\\jsmith\\AppData\\Local\\Microsoft\\Teams\\current\\Teams.exe"',
+                "InitiatingProcessAccountName": "jsmith",
+            },
+            {
+                "ActionType": "ImageLoaded",
+                "FileName": "version.dll",
+                "FolderPath": "C:\\ProgramData\\evil\\version.dll",
+                "SHA1": "bb" * 20,
+                "SHA256": "bb" * 32,
+                "MD5": "bb" * 16,
+                "IsSigned": False,
+                "IsCodeSigningCertValid": None,
+                "Signer": None,
+                "SignerHash": None,
+                "Issuer": None,
+                "IssuerHash": None,
+                "InitiatingProcessFileName": "msiexec.exe",
+                "InitiatingProcessCommandLine": "msiexec.exe /i C:\\ProgramData\\evil\\installer.msi",
+                "InitiatingProcessAccountName": "jsmith",
+            },
+        ],
+    },
+    # ------------------------------------------------------------------
+    # MDO email scenarios
+    # ------------------------------------------------------------------
+    "mdo-phish-delivered": {
+        "table": "EmailEvents",
+        "mitre": ["T1566.001", "T1204.002"],
+        "detection_rules": ["SYN-0024"],
+        "events": [
+            {
+                "NetworkMessageId": "mdo-phish-delivered-001@attacker.io",
+                "InternetMessageId": "<mdo-phish-delivered-001@attacker.io>",
+                "SenderFromAddress": "updates@rn1crosoft.com",
+                "SenderFromDomain": "rn1crosoft.com",
+                "SenderDisplayName": "Microsoft Security",
+                "SenderIPv4": "185.220.101.50",
+                "SenderIPv6": None,
+                "SenderMailFromAddress": "updates@rn1crosoft.com",
+                "SenderMailFromDomain": "rn1crosoft.com",
+                "RecipientEmailAddress": "user@corp.com",
+                "RecipientObjectId": None,
+                "Subject": "Unusual sign-in detected — verify your account",
+                "ConfidenceLevel": "Low",
+                "DeliveryAction": "Delivered",
+                "DeliveryLocation": "Inbox",
+                "EmailActionPolicy": None,
+                "EmailActionPolicyGuid": None,
+                "AttachmentCount": 0,
+                "UrlCount": 2,
+                "EmailLanguage": "en",
+                "AuthenticationDetails": '{"SPF":"fail","DKIM":"fail","DMARC":"fail","CompAuth":"fail"}',
+                "ThreatNames": ["Phish"],
+                "ThreatTypes": ["Phish"],
+                "DetectionMethods": '{"Phish":["URL reputation"]}',
+                "OrgLevelPolicy": None,
+                "OrgLevelAction": None,
+                "UserLevelPolicy": None,
+                "UserLevelAction": None,
+                "Directionality": "Inbound",
+                "Connectors": None,
+            },
+        ],
+    },
+    "mdo-malicious-attachment": {
+        "table": "EmailAttachmentInfo",
+        "mitre": ["T1566.001"],
+        "detection_rules": ["SYN-0025"],
+        "events": [
+            {
+                "NetworkMessageId": "mdo-malicious-attach-001@attacker.io",
+                "SenderFromAddress": "billing@rogue-invoice.com",
+                "RecipientEmailAddress": "finance@corp.com",
+                "FileName": "Invoice_Q4_2024.xlsm",
+                "FileType": "application/vnd.ms-excel.sheet.macroEnabled.12",
+                "SHA256": "cc" * 32,
+                "MalwareFamily": "Emotet",
+                "ThreatNames": ["Emotet"],
+                "ThreatTypes": ["Malware"],
+                "DetectionMethods": '{"Malware":["File detonation","AV engine"]}',
+            },
+        ],
+    },
+    "mdo-zap": {
+        "table": "EmailPostDeliveryEvents",
+        "mitre": ["T1566.001"],
+        "detection_rules": ["SYN-0026"],
+        "events": [
+            {
+                # ZAP fired after phishing was initially delivered (same NetworkMessageId as mdo-phish-delivered)
+                "NetworkMessageId": "mdo-phish-delivered-001@attacker.io",
+                "InternetMessageId": "<mdo-phish-delivered-001@attacker.io>",
+                "SenderFromAddress": "updates@rn1crosoft.com",
+                "RecipientEmailAddress": "user@corp.com",
+                "RecipientObjectId": None,
+                "DeliveryLocation": "Inbox",
+                "Action": "Deleted",
+                "ActionType": "ZAP",
+                "ActionTrigger": "ZAP",
+                "ActionResult": "Success",
+                "DeliveryTimestamp": None,
+            },
+        ],
+    },
+    # ------------------------------------------------------------------
+    # MDO Safe Links click scenarios
+    # ------------------------------------------------------------------
+    "url-click-blocked": {
+        "table": "UrlClickEvents",
+        "mitre": ["T1566.002", "T1204.001"],
+        "detection_rules": ["SYN-0027"],
+        "events": [
+            {
+                "Url": "http://rn1crosoft.com/verify?token=eyJhbGciOiJIUzI1NiJ9",
+                "ActionType": "ClickBlocked",
+                "AccountUpn": "user@corp.com",
+                "NetworkMessageId": "mdo-phish-delivered-001@attacker.io",
+                "Workload": "Email",
+                "IPAddress": "10.0.0.42",
+                "IsClickedThrough": False,
+                "UrlChain": ["http://rn1crosoft.com/verify?token=eyJhbGciOiJIUzI1NiJ9"],
+                "ThreatTypes": ["Phish"],
+                "DetectionMethods": '{"Phish":["URL reputation","Detonation"]}',
+            },
+        ],
+    },
+    # ------------------------------------------------------------------
+    # Identity scenarios
+    # ------------------------------------------------------------------
+    "ad-privilege-escalation": {
+        "table": "IdentityDirectoryEvents",
+        "mitre": ["T1098", "T1078.002"],
+        "detection_rules": ["SYN-0028"],
+        "events": [
+            {
+                "ActionType": "MemberAddedToGroup",
+                "Application": "Active Directory",
+                "TargetAccountUpn": "jsmith@corp.local",
+                "TargetAccountDisplayName": "John Smith",
+                "TargetDeviceName": None,
+                "DestinationDeviceName": "SRV-DC01",
+                "DestinationIPAddress": "10.0.0.1",
+                "DestinationPort": 389,
+                "Protocol": "LDAP",
+                "AccountUpn": "svc_deploy@corp.local",
+                "AccountSid": "S-1-5-21-1234567890-1234567890-1234567890-1103",
+                "AccountObjectId": None,
+                "AccountDisplayName": "Deploy Service Account",
+                "AccountName": "svc_deploy",
+                "AccountDomain": "CORP",
+                "DeviceName": "CORP-WS-001",
+                "IPAddress": "10.0.0.10",
+                "Port": 49152,
+                "Location": None,
+                "ISP": None,
+                "CountryCode": None,
+                "City": None,
+                "AdditionalFields": '{"GroupName":"Domain Admins","GroupSid":"S-1-5-21-1234567890-1234567890-1234567890-512"}',
+            },
+            {
+                "ActionType": "AdminPrivilegeGranted",
+                "Application": "Active Directory",
+                "TargetAccountUpn": "jsmith@corp.local",
+                "TargetAccountDisplayName": "John Smith",
+                "TargetDeviceName": None,
+                "DestinationDeviceName": "SRV-DC01",
+                "DestinationIPAddress": "10.0.0.1",
+                "DestinationPort": 389,
+                "Protocol": "LDAP",
+                "AccountUpn": "svc_deploy@corp.local",
+                "AccountSid": "S-1-5-21-1234567890-1234567890-1234567890-1103",
+                "AccountObjectId": None,
+                "AccountDisplayName": "Deploy Service Account",
+                "AccountName": "svc_deploy",
+                "AccountDomain": "CORP",
+                "DeviceName": "CORP-WS-001",
+                "IPAddress": "10.0.0.10",
+                "Port": 49152,
+                "Location": None,
+                "ISP": None,
+                "CountryCode": None,
+                "City": None,
+                "AdditionalFields": '{"Privilege":"SeDebugPrivilege","GrantedBy":"svc_deploy"}',
+            },
+        ],
+    },
+    "ldap-recon": {
+        "table": "IdentityQueryEvents",
+        "mitre": ["T1087.002", "T1069.002"],
+        "detection_rules": ["SYN-0029"],
+        # 60 rapid LDAP searches — attacker enumerating AD users and groups
+        "events": [
+            {
+                "ActionType": "LdapSearch",
+                "Application": "Active Directory",
+                "QueryType": "LDAP",
+                "QueryTarget": "DC=corp,DC=local",
+                "Protocol": "LDAP",
+                "AccountUpn": "jsmith@corp.local",
+                "AccountSid": "S-1-5-21-1234567890-1234567890-1234567890-1001",
+                "AccountObjectId": None,
+                "AccountDisplayName": "John Smith",
+                "AccountName": "jsmith",
+                "AccountDomain": "CORP",
+                "DeviceName": "CORP-WS-001",
+                "IPAddress": "10.0.0.10",
+                "Port": 49152 + i,
+                "DestinationDeviceName": "SRV-DC01",
+                "DestinationIPAddress": "10.0.0.1",
+                "DestinationPort": 389,
+                "AdditionalFields": f'{{"filter":"(objectClass=user)","scope":"subtree","count":{i + 1}}}',
+            }
+            for i in range(60)
+        ],
+    },
 }
 
 
@@ -836,6 +1074,63 @@ _ZS_DNS_DOMAINS = [
     "www.google.com", "microsoft.com", "github.com",
     "slack.com", "teams.microsoft.com", "outlook.office365.com",
 ]
+
+# Value pools for DeviceImageLoadEvents, DeviceInfo, DeviceNetworkInfo, DeviceFileCertificateInfo
+_SIGNED_DLLS = [
+    ("ntdll.dll",     "C:\\Windows\\System32\\ntdll.dll"),
+    ("kernel32.dll",  "C:\\Windows\\System32\\kernel32.dll"),
+    ("advapi32.dll",  "C:\\Windows\\System32\\advapi32.dll"),
+    ("user32.dll",    "C:\\Windows\\System32\\user32.dll"),
+    ("ole32.dll",     "C:\\Windows\\System32\\ole32.dll"),
+    ("shell32.dll",   "C:\\Windows\\System32\\shell32.dll"),
+    ("msvcrt.dll",    "C:\\Windows\\System32\\msvcrt.dll"),
+    ("crypt32.dll",   "C:\\Windows\\System32\\crypt32.dll"),
+    ("wininet.dll",   "C:\\Windows\\System32\\wininet.dll"),
+    ("ws2_32.dll",    "C:\\Windows\\System32\\ws2_32.dll"),
+]
+_MSFT_SIGNERS = [
+    "Microsoft Corporation",
+    "Microsoft Windows",
+    "Microsoft Windows Publisher",
+]
+_MSFT_ISSUERS = [
+    "Microsoft Code Signing PCA 2011",
+    "Microsoft Windows Production PCA 2011",
+]
+_OS_PLATFORMS = [
+    "Windows10", "Windows11", "WindowsServer2019", "WindowsServer2022",
+]
+
+# Value pools for MDO email tables
+_MDO_SENDERS_BENIGN = [
+    ("noreply@github.com",       "github.com"),
+    ("billing@aws.amazon.com",   "aws.amazon.com"),
+    ("no-reply@microsoft.com",   "microsoft.com"),
+    ("notifications@slack.com",  "slack.com"),
+    ("noreply@atlassian.com",    "atlassian.com"),
+]
+_MDO_SUBJECTS_BENIGN = [
+    "Your monthly invoice",
+    "New pull request review requested",
+    "Meeting notes — weekly sync",
+    "Security advisory notification",
+    "Build notification: main passed",
+]
+
+# Value pools for identity tables
+_LDAP_SEARCH_BASES = [
+    "DC=corp,DC=local",
+    "OU=Users,DC=corp,DC=local",
+    "OU=Groups,DC=corp,DC=local",
+    "CN=Computers,DC=corp,DC=local",
+]
+_IDENTITY_UPNS = [
+    "jsmith@corp.local", "bjones@corp.local", "amartin@corp.local",
+    "kwilliams@corp.local", "lmiller@corp.local", "dbrown@corp.local",
+    "rdavis@corp.local", "cwilson@corp.local", "tmoore@corp.local",
+]
+_AD_GROUPS = ["Domain Users", "IT Staff", "HR Department", "Engineering", "Finance"]
+_DCS = ["SRV-DC01", "SRV-DC02"]
 
 
 def _generate_benign_cloudtrail_event(
@@ -1140,22 +1435,468 @@ def _generate_benign_cloudflare_firewall_event(
     }
 
 
+def _generate_benign_image_load_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    dll_name, dll_path = rng.choice(_SIGNED_DLLS)
+    proc_name, _ = rng.choice(_BENIGN_PROCESSES)
+    signer = rng.choice(_MSFT_SIGNERS)
+    issuer = rng.choice(_MSFT_ISSUERS)
+    return {
+        "Timestamp": ts,
+        "DeviceId": str(uuid.uuid5(uuid.NAMESPACE_DNS, device)),
+        "DeviceName": device,
+        "ActionType": "ImageLoaded",
+        "FileName": dll_name,
+        "FolderPath": dll_path,
+        "SHA1": "".join(rng.choices("0123456789abcdef", k=40)),
+        "SHA256": _random_sha256(rng),
+        "MD5": "".join(rng.choices("0123456789abcdef", k=32)),
+        "IsSigned": True,
+        "IsCodeSigningCertValid": True,
+        "Signer": signer,
+        "SignerHash": "".join(rng.choices("0123456789abcdef", k=40)),
+        "Issuer": issuer,
+        "IssuerHash": "".join(rng.choices("0123456789abcdef", k=40)),
+        "InitiatingProcessFileName": proc_name,
+        "InitiatingProcessId": rng.randint(1000, 65535),
+        "InitiatingProcessCommandLine": rng.choice(_BENIGN_CMDLINES),
+        "InitiatingProcessAccountName": user,
+        "InitiatingProcessSHA256": _random_sha256(rng),
+        "InitiatingProcessParentId": rng.randint(100, 9999),
+        "InitiatingProcessParentFileName": "explorer.exe",
+        "ReportId": str(uuid.uuid4()),
+    }
+
+
+def _generate_benign_device_info(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    return {
+        "Timestamp": ts,
+        "DeviceId": str(uuid.uuid5(uuid.NAMESPACE_DNS, device)),
+        "DeviceName": device,
+        "ClientVersion": f"10.8560.{rng.randint(1000, 9999)}.0",
+        "PublicIP": f"203.{rng.randint(0,255)}.{rng.randint(0,255)}.{rng.randint(1,254)}",
+        "OSArchitecture": "x64",
+        "OSPlatform": rng.choice(_OS_PLATFORMS),
+        "OSBuild": rng.choice([19044, 19045, 22000, 22621, 22631, 17763, 20348]),
+        "OSVersion": rng.choice(["10.0.19045", "10.0.22631", "10.0.22000", "10.0.17763"]),
+        "OSDistribution": None,
+        "OSVersionInfo": None,
+        "IsAzureADJoined": True,
+        "AadDeviceId": str(uuid.uuid4()),
+        "LoggedOnUsers": f'[{{"UserName":"{user}","DomainName":"{domain}"}}]',
+        "RegistryDeviceTag": None,
+        "DeviceCategory": "Endpoint",
+        "DeviceType": rng.choice(["Workstation", "Workstation", "Server"]),
+        "DeviceSubtype": None,
+        "MergedDeviceIds": None,
+        "MergedToDeviceId": None,
+        "ReportId": str(uuid.uuid4()),
+    }
+
+
+def _generate_benign_device_network_info(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    mac = ":".join(f"{rng.randint(0, 255):02x}" for _ in range(6))
+    local_ip = f"10.0.{rng.randint(0,10)}.{rng.randint(1,254)}"
+    return {
+        "Timestamp": ts,
+        "DeviceId": str(uuid.uuid5(uuid.NAMESPACE_DNS, device)),
+        "DeviceName": device,
+        "NetworkAdapterId": str(uuid.uuid4()),
+        "NetworkAdapterName": rng.choice(["Ethernet0", "Wi-Fi", "Local Area Connection"]),
+        "MacAddress": mac,
+        "NetworkAdapterType": rng.choice(["Ethernet", "WiFi", "Loopback"]),
+        "NetworkAdapterStatus": "Up",
+        "TunnelType": None,
+        "IPv4Dhcp": "10.0.0.1",
+        "IPv6Dhcp": None,
+        "DefaultGateways": ["10.0.0.1"],
+        "IPAddresses": f'[{{"IPAddress":"{local_ip}","SubnetPrefix":24}}]',
+        "DNSAddresses": ["10.0.0.2", "10.0.0.3"],
+        "ConnectedNetworks": None,
+        "NetworkAdapterVendor": rng.choice(["Intel", "Realtek", "Broadcom"]),
+        "ReportId": str(uuid.uuid4()),
+    }
+
+
+def _generate_benign_file_certificate_info(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    signer = rng.choice(_MSFT_SIGNERS)
+    issuer = rng.choice(_MSFT_ISSUERS)
+    return {
+        "Timestamp": ts,
+        "DeviceId": str(uuid.uuid5(uuid.NAMESPACE_DNS, device)),
+        "DeviceName": device,
+        "SHA1": "".join(rng.choices("0123456789abcdef", k=40)),
+        "IsSigned": True,
+        "SignatureType": "Embedded",
+        "IsCodeSigningCertValid": True,
+        "Signer": signer,
+        "SignerHash": "".join(rng.choices("0123456789abcdef", k=40)),
+        "Issuer": issuer,
+        "IssuerHash": "".join(rng.choices("0123456789abcdef", k=40)),
+        "CertificateSerialNumber": "".join(rng.choices("0123456789abcdef", k=32)),
+        "CrlDistributionPointUrls": ["http://crl.microsoft.com/pki/crl/products/MicCodSigPCA2011.crl"],
+        "CertificateCreationTime": "2023-01-01T00:00:00+00:00",
+        "CertificateExpirationTime": "2026-01-01T00:00:00+00:00",
+        "CertificateCountersignatureTime": "2024-06-15T10:00:00+00:00",
+        "IsRootSignerMicrosoft": True,
+        "IsTestSigningEnabled": False,
+        "ReportId": str(uuid.uuid4()),
+    }
+
+
+def _generate_benign_email_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    sender_addr, sender_domain = rng.choice(_MDO_SENDERS_BENIGN)
+    recipient = rng.choice(_PP_RECIPIENTS)
+    msg_id = f"{uuid.uuid4()}@{sender_domain}"
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "NetworkMessageId": msg_id,
+        "InternetMessageId": f"<{msg_id}>",
+        "SenderFromAddress": sender_addr,
+        "SenderFromDomain": sender_domain,
+        "SenderDisplayName": sender_domain.split(".")[0].capitalize(),
+        "SenderIPv4": f"40.{rng.randint(0,255)}.{rng.randint(0,255)}.{rng.randint(1,254)}",
+        "SenderIPv6": None,
+        "SenderMailFromAddress": sender_addr,
+        "SenderMailFromDomain": sender_domain,
+        "RecipientEmailAddress": recipient,
+        "RecipientObjectId": str(uuid.uuid4()),
+        "Subject": rng.choice(_MDO_SUBJECTS_BENIGN),
+        "ConfidenceLevel": "None",
+        "DeliveryAction": "Delivered",
+        "DeliveryLocation": "Inbox",
+        "EmailActionPolicy": None,
+        "EmailActionPolicyGuid": None,
+        "AttachmentCount": rng.randint(0, 2),
+        "UrlCount": rng.randint(0, 5),
+        "EmailLanguage": "en",
+        "AuthenticationDetails": '{"SPF":"pass","DKIM":"pass","DMARC":"pass","CompAuth":"pass"}',
+        "ThreatNames": None,
+        "ThreatTypes": None,
+        "DetectionMethods": None,
+        "OrgLevelPolicy": None,
+        "OrgLevelAction": None,
+        "UserLevelPolicy": None,
+        "UserLevelAction": None,
+        "Directionality": "Inbound",
+        "Connectors": None,
+    }
+
+
+def _generate_benign_email_attachment_info(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    sender_addr, sender_domain = rng.choice(_MDO_SENDERS_BENIGN)
+    safe_attachments = [
+        ("invoice_jan2024.pdf",   "application/pdf"),
+        ("quarterly_report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        ("meeting_notes.docx",    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        ("diagram.png",           "image/png"),
+    ]
+    filename, filetype = rng.choice(safe_attachments)
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "NetworkMessageId": f"{uuid.uuid4()}@{sender_domain}",
+        "SenderFromAddress": sender_addr,
+        "RecipientEmailAddress": rng.choice(_PP_RECIPIENTS),
+        "FileName": filename,
+        "FileType": filetype,
+        "SHA256": _random_sha256(rng),
+        "MalwareFamily": None,
+        "ThreatNames": None,
+        "ThreatTypes": None,
+        "DetectionMethods": None,
+    }
+
+
+def _generate_benign_email_post_delivery_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    # Benign: admin bulk-deleting newsletters or moving spam retroactively
+    sender_addr, sender_domain = rng.choice(_MDO_SENDERS_BENIGN)
+    msg_id = f"{uuid.uuid4()}@{sender_domain}"
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "NetworkMessageId": msg_id,
+        "InternetMessageId": f"<{msg_id}>",
+        "SenderFromAddress": sender_addr,
+        "RecipientEmailAddress": rng.choice(_PP_RECIPIENTS),
+        "RecipientObjectId": None,
+        "DeliveryLocation": "JunkFolder",
+        "Action": "Moved",
+        "ActionType": "ManualRemediation",
+        "ActionTrigger": "Admin",
+        "ActionResult": "Success",
+        "DeliveryTimestamp": None,
+    }
+
+
+def _generate_benign_email_url_info(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    sender_addr, sender_domain = rng.choice(_MDO_SENDERS_BENIGN)
+    safe_urls = [
+        ("https://github.com/notifications",       "github.com"),
+        ("https://aws.amazon.com/console",         "aws.amazon.com"),
+        ("https://microsoft.com/account/activity", "microsoft.com"),
+        ("https://slack.com/archives",             "slack.com"),
+        ("https://atlassian.net/jira/browse",      "atlassian.net"),
+    ]
+    url, url_domain = rng.choice(safe_urls)
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "NetworkMessageId": f"{uuid.uuid4()}@{sender_domain}",
+        "Url": url,
+        "UrlDomain": url_domain,
+        "UrlLocation": rng.choice(["Body", "Body", "Header"]),
+        "UrlChain": None,
+    }
+
+
+def _generate_benign_url_click_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    safe_urls = [
+        "https://github.com/notifications",
+        "https://microsoft.com/account/activity",
+        "https://aws.amazon.com/console",
+    ]
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "Url": rng.choice(safe_urls),
+        "ActionType": "ClickAllowed",
+        "AccountUpn": rng.choice(_IDENTITY_UPNS),
+        "NetworkMessageId": f"{uuid.uuid4()}@microsoft.com",
+        "Workload": "Email",
+        "IPAddress": f"10.{rng.randint(0,10)}.{rng.randint(0,255)}.{rng.randint(1,254)}",
+        "IsClickedThrough": False,
+        "UrlChain": None,
+        "ThreatTypes": None,
+        "DetectionMethods": None,
+    }
+
+
+def _generate_benign_identity_directory_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    # Routine directory events: password changes, group membership housekeeping
+    action = rng.choice(["PasswordChanged", "AccountModified", "MemberAddedToGroup", "MemberRemovedFromGroup"])
+    upn = rng.choice(_IDENTITY_UPNS)
+    additional = (
+        f'{{"GroupName":"{rng.choice(_AD_GROUPS)}"}}'
+        if "Group" in action
+        else "{}"
+    )
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "ActionType": action,
+        "Application": "Active Directory",
+        "TargetAccountUpn": upn,
+        "TargetAccountDisplayName": upn.split("@")[0].capitalize(),
+        "TargetDeviceName": None,
+        "DestinationDeviceName": rng.choice(_DCS),
+        "DestinationIPAddress": "10.0.0.1",
+        "DestinationPort": 389,
+        "Protocol": "LDAP",
+        "AccountUpn": None,
+        "AccountSid": None,
+        "AccountObjectId": None,
+        "AccountDisplayName": None,
+        "AccountName": user,
+        "AccountDomain": domain,
+        "DeviceName": device,
+        "IPAddress": f"10.0.{rng.randint(0,10)}.{rng.randint(1,254)}",
+        "Port": rng.randint(49152, 65535),
+        "Location": None,
+        "ISP": None,
+        "CountryCode": None,
+        "City": None,
+        "AdditionalFields": additional,
+    }
+
+
+def _generate_benign_identity_query_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    # Normal LDAP/DNS lookups during authentication and group policy processing
+    action = rng.choice(["LdapSearch", "DnsQuery", "SamrObjectQuery"])
+    if action == "LdapSearch":
+        query_type = "LDAP"
+        query_target = rng.choice(_LDAP_SEARCH_BASES)
+        dest_port = 389
+    elif action == "DnsQuery":
+        query_type = "DNS"
+        query_target = f"{device}.corp.local"
+        dest_port = 53
+    else:
+        query_type = "SAMR"
+        query_target = f"{domain}\\domain users"
+        dest_port = 445
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "ActionType": action,
+        "Application": "Active Directory",
+        "QueryType": query_type,
+        "QueryTarget": query_target,
+        "Protocol": query_type,
+        "AccountUpn": rng.choice(_IDENTITY_UPNS),
+        "AccountSid": f"S-1-5-21-{rng.randint(100000,999999)}-{rng.randint(100000,999999)}-{rng.randint(1000,9999)}-1001",
+        "AccountObjectId": None,
+        "AccountDisplayName": user,
+        "AccountName": user,
+        "AccountDomain": domain,
+        "DeviceName": device,
+        "IPAddress": f"10.0.{rng.randint(0,10)}.{rng.randint(1,254)}",
+        "Port": rng.randint(49152, 65535),
+        "DestinationDeviceName": rng.choice(_DCS),
+        "DestinationIPAddress": "10.0.0.1",
+        "DestinationPort": dest_port,
+        "AdditionalFields": "{}",
+    }
+
+
+def _generate_benign_identity_info(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    upn = rng.choice(_IDENTITY_UPNS)
+    username = upn.split("@")[0]
+    sid = f"S-1-5-21-{rng.randint(100000,999999)}-{rng.randint(100000,999999)}-{rng.randint(1000,9999)}-1001"
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "AccountUpn": upn,
+        "AccountObjectId": str(uuid.uuid4()),
+        "AccountDisplayName": username.capitalize(),
+        "AccountDomain": domain,
+        "AccountName": username,
+        "AccountSid": sid,
+        "GivenName": username.capitalize(),
+        "Surname": "Employee",
+        "Department": rng.choice(["Engineering", "Finance", "HR", "Sales", "IT", "Operations"]),
+        "JobTitle": rng.choice(["Senior Analyst", "Engineer", "Manager", "Coordinator", "Specialist"]),
+        "OfficeLocation": rng.choice(["HQ-Floor3", "Remote", "Branch-London"]),
+        "City": rng.choice(["New York", "London", "Seattle"]),
+        "Country": rng.choice(["US", "GB", "US"]),
+        "IsAccountEnabled": True,
+        "Manager": rng.choice(_IDENTITY_UPNS),
+        "Phone": f"+1-555-{rng.randint(100,999)}-{rng.randint(1000,9999)}",
+        "MFAEnabled": True,
+        "AssignedRoles": None,
+        "EmailAddress": upn.replace(".local", ".com"),
+        "ProxyAddresses": [upn.replace(".local", ".com")],
+        "Tags": None,
+        "OnPremSid": sid,
+        "CloudSid": None,
+    }
+
+
+def _generate_benign_identity_account_info(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    upn = rng.choice(_IDENTITY_UPNS)
+    username = upn.split("@")[0]
+    sid = f"S-1-5-21-{rng.randint(100000,999999)}-{rng.randint(100000,999999)}-{rng.randint(1000,9999)}-1001"
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "AccountObjectId": str(uuid.uuid4()),
+        "AccountUpn": upn,
+        "AccountDisplayName": username.capitalize(),
+        "AccountDomain": domain,
+        "AccountName": username,
+        "AccountSid": sid,
+        "OnPremSid": sid,
+        "IsAccountEnabled": True,
+        "IsLicensed": True,
+        "AssignedLicenses": [rng.choice(["Microsoft 365 E3", "Microsoft 365 E5", "Exchange Online Plan 1"])],
+        "Department": rng.choice(["Engineering", "Finance", "HR", "Sales", "IT"]),
+        "JobTitle": rng.choice(["Engineer", "Analyst", "Manager"]),
+        "Manager": rng.choice(_IDENTITY_UPNS),
+        "OfficeLocation": rng.choice(["HQ-Floor3", "Remote"]),
+        "AccountType": rng.choice(["User", "User", "ServiceAccount"]),
+        "AdditionalFields": "{}",
+    }
+
+
+def _generate_benign_identity_event(
+    device: str, user: str, domain: str, ts: str, rng: random.Random
+) -> dict[str, Any]:
+    # Generic identity events: MFA challenges, token issuance, session creation
+    upn = rng.choice(_IDENTITY_UPNS)
+    return {
+        "Timestamp": ts,
+        "ReportId": str(uuid.uuid4()),
+        "ActionType": rng.choice(["SessionCreated", "MFAChallengeCompleted", "TokenIssued", "PasswordResetCompleted"]),
+        "Application": rng.choice(["Microsoft Entra ID", "Active Directory", "Microsoft Authenticator"]),
+        "TargetAccountUpn": None,
+        "TargetAccountDisplayName": None,
+        "AccountUpn": upn,
+        "AccountSid": f"S-1-5-21-{rng.randint(100000,999999)}-{rng.randint(100000,999999)}-{rng.randint(1000,9999)}-1001",
+        "AccountObjectId": str(uuid.uuid4()),
+        "AccountDisplayName": upn.split("@")[0].capitalize(),
+        "AccountName": user,
+        "AccountDomain": domain,
+        "DeviceName": device,
+        "IPAddress": f"10.0.{rng.randint(0,10)}.{rng.randint(1,254)}",
+        "Port": None,
+        "DestinationDeviceName": None,
+        "DestinationIPAddress": None,
+        "DestinationPort": None,
+        "Protocol": None,
+        "AdditionalFields": "{}",
+    }
+
+
 # AbnormalThreatEvents and AbnormalCaseEvents have no benign generators —
 # every Abnormal record represents a detection by definition.
 
 _BENIGN_GENERATORS = {
-    "DeviceProcessEvents": _generate_benign_process_event,
-    "DeviceNetworkEvents": _generate_benign_network_event,
-    "DeviceLogonEvents": _generate_benign_logon_event,
-    "DeviceRegistryEvents": _generate_benign_registry_event,
-    "AWSCloudTrailEvents": _generate_benign_cloudtrail_event,
-    "CloudflareHttpEvents": _generate_benign_cloudflare_http_event,
-    "CloudflareDnsEvents": _generate_benign_cloudflare_dns_event,
-    "ZscalerWebEvents": _generate_benign_zscaler_web_event,
-    "ZscalerDnsEvents": _generate_benign_zscaler_dns_event,
-    "ProofpointMessageEvents": _generate_benign_proofpoint_message_event,
-    "ProofpointClickEvents": _generate_benign_proofpoint_click_event,
-    "CloudflareFirewallEvents": _generate_benign_cloudflare_firewall_event,
+    # Core device telemetry
+    "DeviceProcessEvents":        _generate_benign_process_event,
+    "DeviceNetworkEvents":        _generate_benign_network_event,
+    "DeviceLogonEvents":          _generate_benign_logon_event,
+    "DeviceRegistryEvents":       _generate_benign_registry_event,
+    "DeviceImageLoadEvents":      _generate_benign_image_load_event,
+    "DeviceInfo":                 _generate_benign_device_info,
+    "DeviceNetworkInfo":          _generate_benign_device_network_info,
+    "DeviceFileCertificateInfo":  _generate_benign_file_certificate_info,
+    # Cloud and network security
+    "AWSCloudTrailEvents":        _generate_benign_cloudtrail_event,
+    "CloudflareHttpEvents":       _generate_benign_cloudflare_http_event,
+    "CloudflareDnsEvents":        _generate_benign_cloudflare_dns_event,
+    "CloudflareFirewallEvents":   _generate_benign_cloudflare_firewall_event,
+    "ZscalerWebEvents":           _generate_benign_zscaler_web_event,
+    "ZscalerDnsEvents":           _generate_benign_zscaler_dns_event,
+    # Email tables
+    "ProofpointMessageEvents":    _generate_benign_proofpoint_message_event,
+    "ProofpointClickEvents":      _generate_benign_proofpoint_click_event,
+    "EmailEvents":                _generate_benign_email_event,
+    "EmailAttachmentInfo":        _generate_benign_email_attachment_info,
+    "EmailPostDeliveryEvents":    _generate_benign_email_post_delivery_event,
+    "EmailUrlInfo":               _generate_benign_email_url_info,
+    "UrlClickEvents":             _generate_benign_url_click_event,
+    # Identity tables
+    "IdentityDirectoryEvents":    _generate_benign_identity_directory_event,
+    "IdentityQueryEvents":        _generate_benign_identity_query_event,
+    "IdentityInfo":               _generate_benign_identity_info,
+    "IdentityAccountInfo":        _generate_benign_identity_account_info,
+    "IdentityEvents":             _generate_benign_identity_event,
 }
 
 
@@ -1287,29 +2028,47 @@ def generate(
 # without benign generators (Abnormal) so only attack events are produced.
 # ---------------------------------------------------------------------------
 
-_DEMO_PLAN: list[tuple[str, str, int, float]] = [
+_DEMO_PLAN: list[tuple[str, str | None, int, float]] = [
     # (table, scenario, total_events, attack_ratio)
-    ("DeviceProcessEvents",      "encoded-powershell",               500, 0.05),
-    ("DeviceProcessEvents",      "lsass-dump",                       300, 0.05),
-    ("DeviceProcessEvents",      "certutil-download",                300, 0.05),
-    ("DeviceRegistryEvents",     "registry-persistence",             300, 0.05),
-    ("DeviceNetworkEvents",      "lateral-movement",                 400, 0.05),
-    ("DeviceLogonEvents",        "brute-force",                      500, 0.10),
-    ("AWSCloudTrailEvents",      "aws-root-usage",                   300, 0.05),
-    ("AWSCloudTrailEvents",      "aws-cloudtrail-disable",           200, 0.05),
-    ("AWSCloudTrailEvents",      "aws-iam-escalation",               200, 0.05),
-    ("CloudflareFirewallEvents", "cloudflare-waf-spike",             200, 0.20),
-    ("CloudflareDnsEvents",      "cloudflare-dns-threat",            200, 0.05),
-    ("ZscalerWebEvents",         "zscaler-malware-download",         300, 0.05),
-    ("ZscalerWebEvents",         "zscaler-dlp",                      300, 0.05),
-    ("ZscalerDnsEvents",         "zscaler-dns-sinkhole",             200, 0.05),
-    ("ProofpointMessageEvents",  "proofpoint-phish-verymalicious",   150, 0.10),
-    ("ProofpointMessageEvents",  "proofpoint-impostor-delivered",    150, 0.10),
-    ("ProofpointMessageEvents",  "proofpoint-malware-sandbox",       150, 0.10),
-    ("ProofpointClickEvents",    "proofpoint-click-blocked",          80, 0.15),
-    ("AbnormalThreatEvents",     "abnormal-bec-vip",                   1, 1.00),
-    ("AbnormalThreatEvents",     "abnormal-cross-layer-phish",         1, 1.00),
-    ("AbnormalCaseEvents",       "abnormal-case-high-severity",        1, 1.00),
+    # Core device telemetry
+    ("DeviceProcessEvents",       "encoded-powershell",             500, 0.05),
+    ("DeviceProcessEvents",       "lsass-dump",                     300, 0.05),
+    ("DeviceProcessEvents",       "certutil-download",              300, 0.05),
+    ("DeviceRegistryEvents",      "registry-persistence",           300, 0.05),
+    ("DeviceNetworkEvents",       "lateral-movement",               400, 0.05),
+    ("DeviceLogonEvents",         "brute-force",                    500, 0.10),
+    ("DeviceImageLoadEvents",     "dll-hijacking",                  400, 0.05),
+    ("DeviceInfo",                None,                             100, 0.00),
+    ("DeviceNetworkInfo",         None,                             100, 0.00),
+    ("DeviceFileCertificateInfo", None,                             200, 0.00),
+    # Cloud and network security
+    ("AWSCloudTrailEvents",       "aws-root-usage",                 300, 0.05),
+    ("AWSCloudTrailEvents",       "aws-cloudtrail-disable",         200, 0.05),
+    ("AWSCloudTrailEvents",       "aws-iam-escalation",             200, 0.05),
+    ("CloudflareFirewallEvents",  "cloudflare-waf-spike",           200, 0.20),
+    ("CloudflareDnsEvents",       "cloudflare-dns-threat",          200, 0.05),
+    ("ZscalerWebEvents",          "zscaler-malware-download",       300, 0.05),
+    ("ZscalerWebEvents",          "zscaler-dlp",                    300, 0.05),
+    ("ZscalerDnsEvents",          "zscaler-dns-sinkhole",           200, 0.05),
+    # Email tables
+    ("ProofpointMessageEvents",   "proofpoint-phish-verymalicious", 150, 0.10),
+    ("ProofpointMessageEvents",   "proofpoint-impostor-delivered",  150, 0.10),
+    ("ProofpointMessageEvents",   "proofpoint-malware-sandbox",     150, 0.10),
+    ("ProofpointClickEvents",     "proofpoint-click-blocked",        80, 0.15),
+    ("AbnormalThreatEvents",      "abnormal-bec-vip",                 1, 1.00),
+    ("AbnormalThreatEvents",      "abnormal-cross-layer-phish",       1, 1.00),
+    ("AbnormalCaseEvents",        "abnormal-case-high-severity",      1, 1.00),
+    ("EmailEvents",               "mdo-phish-delivered",            300, 0.05),
+    ("EmailAttachmentInfo",       "mdo-malicious-attachment",       200, 0.05),
+    ("EmailPostDeliveryEvents",   "mdo-zap",                        100, 0.10),
+    ("EmailUrlInfo",              None,                             200, 0.00),
+    ("UrlClickEvents",            "url-click-blocked",              200, 0.05),
+    # Identity tables
+    ("IdentityDirectoryEvents",   "ad-privilege-escalation",        300, 0.05),
+    ("IdentityQueryEvents",       "ldap-recon",                     400, 0.10),
+    ("IdentityInfo",              None,                              50, 0.00),
+    ("IdentityAccountInfo",       None,                              50, 0.00),
+    ("IdentityEvents",            None,                             200, 0.00),
 ]
 
 

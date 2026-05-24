@@ -1,0 +1,32 @@
+id: SYN-0024
+synthetic: true
+name: MDO — phishing email delivered to inbox (authentication failure)
+severity: high
+language: kql
+mde_portable: true
+query: |
+  EmailEvents
+  | where Timestamp > ago(1h)
+  | where DeliveryAction == "Delivered"
+  | where ThreatTypes has "Phish" or ThreatNames has "Phish"
+  | project Timestamp, NetworkMessageId, SenderFromAddress, SenderFromDomain,
+            SenderDisplayName, RecipientEmailAddress, Subject,
+            DeliveryAction, DeliveryLocation, ConfidenceLevel,
+            ThreatTypes, ThreatNames, DetectionMethods,
+            AuthenticationDetails, UrlCount, AttachmentCount
+  | order by Timestamp desc
+tags:
+  - T1566.001
+  - T1204.002
+  - phishing
+  - email
+  - mdo
+enabled: true
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+author: fried-plantains
+false_positive_notes: >
+  MDO can classify marketing emails as low-confidence phish. Cross-reference
+  with EmailUrlInfo and UrlClickEvents on NetworkMessageId — a user clicking
+  a blocked URL shortly after delivery confirms the threat. Also join to
+  EmailPostDeliveryEvents to check if ZAP subsequently remediated the message.
