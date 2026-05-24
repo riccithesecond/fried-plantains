@@ -2147,7 +2147,7 @@ def main():
             total_skipped += skipped
             combined_manifest.append({**manifest, "written": written, "skipped": skipped})
             print(
-                f"  {table:<32} scenario={scenario:<38} "
+                f"  {table:<32} scenario={str(scenario):<38} "
                 f"written={written:>4}  skipped={skipped}"
             )
 
