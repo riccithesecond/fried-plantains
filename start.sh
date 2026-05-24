@@ -43,6 +43,11 @@ if [ ! -f "$PYTHON" ]; then
 fi
 ok "Virtual environment found."
 
+# ── backend dependencies ──────────────────────────────────────────────────────
+step "Installing/verifying backend dependencies..."
+"$ROOT/.venv/bin/pip" install -r backend/requirements.txt --quiet
+ok "Backend dependencies ready."
+
 # ── node_modules ──────────────────────────────────────────────────────────────
 if [ ! -d frontend/node_modules ]; then
     step "Installing frontend dependencies..."

@@ -53,6 +53,13 @@ try {
     }
     Write-Ok "Virtual environment found."
 
+    # ── backend dependencies ───────────────────────────────────────────────────
+
+    Write-Step "Installing/verifying backend dependencies..."
+    & "$Root\.venv\Scripts\pip.exe" install -r "$Root\backend\requirements.txt" --quiet
+    if ($LASTEXITCODE -ne 0) { throw "pip install failed (exit $LASTEXITCODE)." }
+    Write-Ok "Backend dependencies ready."
+
     # ── node_modules ──────────────────────────────────────────────────────────
 
     if (-not (Test-Path "$Root\frontend\node_modules")) {
