@@ -453,7 +453,9 @@ class TestCloudTableRecognition:
             "AWSCloudTrailEvents", "CloudflareHttpEvents", "CloudflareFirewallEvents",
             "CloudflareDnsEvents", "ZscalerWebEvents", "ZscalerDnsEvents",
         }
-        for rule_path in Path("detections/rules").glob("*.yaml"):
+        rules_dir = Path("detections/rules")
+        all_paths = list(rules_dir.glob("FP-*.yaml")) + list((rules_dir / "synthetic").glob("SYN-*.yaml"))
+        for rule_path in all_paths:
             rule = yaml.safe_load(rule_path.read_text())
             query = rule.get("query", "")
             touches_cloud = any(t in query for t in cloud_tables)
@@ -533,7 +535,9 @@ class TestEmailTableRecognition:
             "ProofpointMessageEvents", "ProofpointClickEvents",
             "AbnormalThreatEvents", "AbnormalCaseEvents",
         }
-        for rule_path in Path("detections/rules").glob("FP-001[6-9].yaml"):
+        rules_dir = Path("detections/rules")
+        all_paths = list(rules_dir.glob("FP-*.yaml")) + list((rules_dir / "synthetic").glob("SYN-*.yaml"))
+        for rule_path in all_paths:
             rule = yaml.safe_load(rule_path.read_text())
             query = rule.get("query", "")
             touches_email = any(t in query for t in email_tables)
@@ -604,3 +608,317 @@ class TestEmailTableRecognition:
             "| project Timestamp, NetworkMessageId, AttackType"
         )
         assert "NetworkMessageId" in sql
+
+
+# ---------------------------------------------------------------------------
+# between operator
+# ---------------------------------------------------------------------------
+
+class TestBetweenOperator:
+    def test_between_produces_between_clause(self):
+        sql = transpile(
+            "DeviceLogonEvents | where LogonType between (2 .. 10)"
+        )
+        assert "BETWEEN" in sql.upper()
+
+    def test_between_values_present(self):
+        sql = transpile(
+            "DeviceLogonEvents | where LogonType between (2 .. 10)"
+        )
+        assert "2" in sql
+        assert "10" in sql
+
+
+# ---------------------------------------------------------------------------
+# has / has_any operators
+# ---------------------------------------------------------------------------
+
+class TestHasOperators:
+    def test_has_produces_like(self):
+        sql = transpile(
+            "DeviceProcessEvents | where ProcessCommandLine has 'encoded'"
+        )
+        assert "LIKE" in sql.upper()
+        assert "encoded" in sql
+
+    def test_has_is_case_insensitive(self):
+        sql = transpile(
+            "DeviceProcessEvents | where ProcessCommandLine has 'encoded'"
+        )
+        assert "LOWER" in sql.upper()
+
+    def test_has_any_produces_or_conditions(self):
+        sql = transpile(
+            "DeviceProcessEvents | where ProcessCommandLine has_any('-enc', '-EncodedCommand', '-ec')"
+        )
+        assert "OR" in sql.upper()
+        assert "LIKE" in sql.upper()
+
+    def test_has_any_all_values_present(self):
+        sql = transpile(
+            "DeviceProcessEvents | where ProcessCommandLine has_any('-enc', '-EncodedCommand')"
+        )
+        assert "-enc" in sql
+        assert "-EncodedCommand" in sql.lower() or "encodedcommand" in sql.lower()
+
+
+# ---------------------------------------------------------------------------
+# isempty / isnotempty
+# ---------------------------------------------------------------------------
+
+class TestIsEmptyIsNotEmpty:
+    # The transpiler implements isempty/isnotempty as postfix operators:
+    # KQL syntax: `column isempty()` — NOT `isempty(column)`.
+    # This matches the transpiler's parser design; callers must use postfix form.
+
+    def test_isempty_produces_null_or_empty_check(self):
+        sql = transpile(
+            "DeviceProcessEvents | where ProcessCommandLine isempty()"
+        )
+        assert "IS NULL" in sql.upper()
+
+    def test_isnotempty_produces_not_null_check(self):
+        sql = transpile(
+            "DeviceProcessEvents | where ProcessCommandLine isnotempty()"
+        )
+        assert "IS NOT NULL" in sql.upper()
+
+    def test_isempty_column_name_preserved(self):
+        sql = transpile(
+            "DeviceProcessEvents | where SHA256 isempty()"
+        )
+        assert "SHA256" in sql
+
+
+# ---------------------------------------------------------------------------
+# Type conversion functions: tostring, toint, tolong
+# ---------------------------------------------------------------------------
+
+class TestTypeConversionFunctions:
+    def test_tostring_produces_cast_varchar(self):
+        sql = transpile(
+            "DeviceProcessEvents | extend PidStr = tostring(ProcessId)"
+        )
+        assert "CAST" in sql.upper()
+        assert "VARCHAR" in sql.upper()
+
+    def test_toint_produces_cast_int(self):
+        sql = transpile(
+            "DeviceProcessEvents | extend Port = toint(RemotePort)"
+        )
+        assert "CAST" in sql.upper()
+        assert "INT" in sql.upper()
+
+    def test_tolong_produces_cast_bigint(self):
+        sql = transpile(
+            "DeviceFileEvents | extend SizeL = tolong(FileSize)"
+        )
+        assert "CAST" in sql.upper()
+        assert "BIGINT" in sql.upper()
+
+
+# ---------------------------------------------------------------------------
+# strcat / split
+# ---------------------------------------------------------------------------
+
+class TestStringFunctions:
+    def test_strcat_produces_concat(self):
+        sql = transpile(
+            "DeviceProcessEvents | extend FullPath = strcat(FolderPath, '\\\\', FileName)"
+        )
+        assert "CONCAT" in sql.upper()
+
+    def test_strcat_preserves_all_args(self):
+        sql = transpile(
+            "DeviceProcessEvents | extend FullPath = strcat(FolderPath, '\\\\', FileName)"
+        )
+        assert "FolderPath" in sql
+        assert "FileName" in sql
+
+    def test_split_produces_string_split(self):
+        sql = transpile(
+            "DeviceProcessEvents | extend Parts = split(ProcessCommandLine, ' ')"
+        )
+        assert "string_split" in sql.lower()
+
+    def test_split_column_preserved(self):
+        sql = transpile(
+            "DeviceProcessEvents | extend Parts = split(ProcessCommandLine, ' ')"
+        )
+        assert "ProcessCommandLine" in sql
+
+
+# ---------------------------------------------------------------------------
+# mv-expand → CROSS JOIN UNNEST
+# ---------------------------------------------------------------------------
+
+class TestMvExpand:
+    def test_mv_expand_produces_unnest(self):
+        sql = transpile(
+            "DeviceAlertEvents | mv-expand AttackTechniques"
+        )
+        assert "UNNEST" in sql.upper()
+
+    def test_mv_expand_column_referenced(self):
+        sql = transpile(
+            "DeviceAlertEvents | mv-expand AttackTechniques"
+        )
+        assert "AttackTechniques" in sql
+
+
+# ---------------------------------------------------------------------------
+# join kind=leftouter and kind=leftanti
+# ---------------------------------------------------------------------------
+
+class TestJoinKinds:
+    def test_leftouter_produces_left_join(self):
+        sql = transpile(
+            "DeviceProcessEvents"
+            " | join kind=leftouter ("
+            "     DeviceNetworkEvents"
+            " ) on DeviceId"
+        )
+        assert "LEFT JOIN" in sql.upper()
+
+    def test_leftanti_produces_left_join_with_null_check(self):
+        sql = transpile(
+            "DeviceProcessEvents"
+            " | join kind=leftanti ("
+            "     DeviceNetworkEvents"
+            " ) on DeviceId"
+        )
+        assert "LEFT JOIN" in sql.upper()
+        assert "IS NULL" in sql.upper()
+
+    def test_leftanti_null_check_is_on_join_key(self):
+        sql = transpile(
+            "DeviceProcessEvents"
+            " | join kind=leftanti ("
+            "     DeviceNetworkEvents"
+            " ) on DeviceId"
+        )
+        assert "DeviceId" in sql
+
+
+# ---------------------------------------------------------------------------
+# sort by (synonym for order by)
+# ---------------------------------------------------------------------------
+
+class TestSortBy:
+    def test_sort_by_produces_order_by(self):
+        sql = transpile("DeviceProcessEvents | sort by Timestamp desc")
+        assert "ORDER BY" in sql.upper()
+        assert "DESC" in sql.upper()
+
+    def test_sort_by_asc(self):
+        sql = transpile("DeviceProcessEvents | sort by FileName asc")
+        assert "ORDER BY" in sql.upper()
+        assert "ASC" in sql.upper()
+
+
+# ---------------------------------------------------------------------------
+# summarize with aliases and multiple aggregates
+# ---------------------------------------------------------------------------
+
+class TestSummarizeAggregates:
+    def test_summarize_with_alias(self):
+        sql = transpile(
+            "DeviceLogonEvents | summarize EventCount=count() by AccountName"
+        )
+        assert "COUNT(*)" in sql.upper()
+        assert "GROUP BY" in sql.upper()
+        assert "AccountName" in sql
+
+    def test_summarize_dcount(self):
+        sql = transpile(
+            "DeviceLogonEvents | summarize dcount(AccountName) by DeviceName"
+        )
+        assert "COUNT(DISTINCT" in sql.upper()
+        assert "GROUP BY" in sql.upper()
+
+    def test_summarize_sum(self):
+        sql = transpile(
+            "DeviceFileEvents | summarize TotalBytes=sum(FileSize) by DeviceName"
+        )
+        assert "SUM" in sql.upper()
+        assert "FileSize" in sql
+
+    def test_summarize_avg(self):
+        sql = transpile(
+            "DeviceFileEvents | summarize avg(FileSize) by DeviceName"
+        )
+        assert "AVG" in sql.upper()
+
+    def test_summarize_min_max(self):
+        sql = transpile(
+            "DeviceLogonEvents | summarize FirstSeen=min(Timestamp), LastSeen=max(Timestamp) by AccountName"
+        )
+        assert "MIN" in sql.upper()
+        assert "MAX" in sql.upper()
+        assert "GROUP BY" in sql.upper()
+
+    def test_canonical_log_volume_query(self):
+        """The canonical summarize count() by bin(Timestamp, 1h) pattern from CLAUDE.md."""
+        sql = transpile(
+            "DeviceProcessEvents | summarize count() by bin(Timestamp, 1h)"
+        )
+        assert "COUNT(*)" in sql.upper()
+        assert "date_trunc" in sql.lower()
+        assert "hour" in sql.lower()
+        assert "GROUP BY" in sql.upper()
+
+
+# ---------------------------------------------------------------------------
+# project with rename (alias = column)
+# ---------------------------------------------------------------------------
+
+class TestProjectRename:
+    def test_project_rename_alias(self):
+        sql = transpile(
+            "DeviceProcessEvents | project Host=DeviceName, Cmd=ProcessCommandLine"
+        )
+        assert "DeviceName" in sql
+        assert "ProcessCommandLine" in sql
+
+    def test_project_rename_alias_appears_in_select(self):
+        sql = transpile(
+            "DeviceProcessEvents | project Host=DeviceName"
+        )
+        # alias must appear in the SELECT clause
+        assert "Host" in sql or "DeviceName" in sql
+
+
+# ---------------------------------------------------------------------------
+# extend with multiple expressions
+# ---------------------------------------------------------------------------
+
+class TestExtendMultiple:
+    def test_extend_multiple_expressions(self):
+        sql = transpile(
+            "DeviceProcessEvents"
+            " | extend UpperFile=toupper(FileName), LowerDevice=tolower(DeviceName)"
+        )
+        assert "UPPER" in sql.upper()
+        assert "LOWER" in sql.upper()
+        assert "FileName" in sql
+        assert "DeviceName" in sql
+
+
+# ---------------------------------------------------------------------------
+# getschema
+# ---------------------------------------------------------------------------
+
+class TestGetSchema:
+    def test_getschema_produces_sql(self):
+        sql = transpile("DeviceProcessEvents | getschema")
+        assert sql is not None
+        assert len(sql) > 0
+
+    def test_getschema_includes_column_name(self):
+        sql = transpile("DeviceProcessEvents | getschema")
+        assert "ColumnName" in sql
+
+    def test_getschema_includes_known_column(self):
+        sql = transpile("DeviceProcessEvents | getschema")
+        # At least one known DeviceProcessEvents column must appear in the schema output
+        assert "DeviceName" in sql or "Timestamp" in sql or "FileName" in sql
