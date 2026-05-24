@@ -8,7 +8,7 @@ query: |
   EmailEvents
   | where Timestamp > ago(1h)
   | where DeliveryAction == "Delivered"
-  | where ThreatTypes has "Phish" or ThreatNames has "Phish"
+  | where AuthenticationDetails contains "fail"
   | project Timestamp, NetworkMessageId, SenderFromAddress, SenderFromDomain,
             SenderDisplayName, RecipientEmailAddress, Subject,
             DeliveryAction, DeliveryLocation, ConfidenceLevel,

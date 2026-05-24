@@ -11,8 +11,7 @@ query: |
   | summarize ViolationCount=count(), TotalBytesOut=sum(BytesOut),
             UniqueDestinations=dcount(RequestHost)
             by UserName, Department, PolicyName
-  | where ViolationCount > 3
-  | order by TotalBytesOut desc
+  | top 10 by TotalBytesOut
 tags:
   - T1048
   - exfiltration

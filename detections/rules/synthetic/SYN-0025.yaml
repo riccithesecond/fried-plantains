@@ -7,7 +7,7 @@ mde_portable: true
 query: |
   EmailAttachmentInfo
   | where Timestamp > ago(1h)
-  | where isnotempty(MalwareFamily) or ThreatTypes has "Malware"
+  | where MalwareFamily != ""
   | project Timestamp, NetworkMessageId, SenderFromAddress, RecipientEmailAddress,
             FileName, FileType, SHA256, MalwareFamily,
             ThreatNames, ThreatTypes, DetectionMethods

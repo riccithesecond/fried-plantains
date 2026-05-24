@@ -8,7 +8,6 @@ query: |
   UrlClickEvents
   | where Timestamp > ago(1h)
   | where ActionType in ("ClickBlocked", "ClickBlockedByTenantAdmin")
-  | where ThreatTypes has "Phish" or ThreatTypes has "Malware"
   | project Timestamp, AccountUpn, Url, ActionType, NetworkMessageId,
             Workload, IPAddress, IsClickedThrough,
             ThreatTypes, DetectionMethods

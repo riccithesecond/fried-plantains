@@ -8,17 +8,10 @@ query: |
   IdentityQueryEvents
   | where Timestamp > ago(1h)
   | where ActionType == "LdapSearch"
-  | summarize QueryCount = count(),
-              DistinctTargets = dcount(QueryTarget),
-              FirstSeen = min(Timestamp),
-              LastSeen = max(Timestamp)
+  | summarize QueryCount = count(), DistinctTargets = dcount(QueryTarget)
       by AccountUpn, AccountName, AccountDomain, DeviceName, IPAddress,
          bin(Timestamp, 5m)
-  | where QueryCount > 30
-  | extend DurationMinutes = datetime_diff('minute', LastSeen, FirstSeen)
-  | project Timestamp, AccountUpn, AccountName, AccountDomain,
-            DeviceName, IPAddress, QueryCount, DistinctTargets, DurationMinutes
-  | order by QueryCount desc
+  | top 20 by QueryCount
 tags:
   - T1087.002
   - T1069.002

@@ -11,8 +11,7 @@ query: |
   | where ThreatCategory != ""
   | summarize QueryCount=count(), UniqueUsers=dcount(UserID)
             by QueryName, ThreatCategory, ThreatIndicator
-  | where QueryCount > 1
-  | order by QueryCount desc
+  | top 10 by QueryCount
 tags:
   - T1071.004
   - command-and-control

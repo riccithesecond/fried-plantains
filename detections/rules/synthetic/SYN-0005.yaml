@@ -1,35 +1,26 @@
 id: SYN-0005
 synthetic: true
-name: Brute force pattern - multiple failed logons followed by success
+name: Brute force pattern — high failed logon count per account
 description: >
-  Detects brute force attacks by identifying accounts with 5 or more failed logon
-  attempts within a 10-minute window followed by a successful logon. This pattern
-  indicates a credential stuffing or password spray attack that eventually succeeded,
-  which is the highest-risk credential threat scenario.
+  Detects accounts accumulating large numbers of failed logon attempts within
+  a one-hour window. Surfaces the highest-volume targets first. A follow-on
+  manual investigation should confirm whether a successful logon occurred after
+  the failures (credential stuffing that succeeded).
 severity: high
 language: kql
 query: |
-  let lookback = ago(1h);
-  let failedLogons = DeviceLogonEvents
-  | where Timestamp > lookback
+  DeviceLogonEvents
+  | where Timestamp > ago(1h)
   | where ActionType == "LogonFailed"
-  | summarize FailCount = count(), LastFail = max(Timestamp) by AccountName, DeviceName;
-  let successLogons = DeviceLogonEvents
-  | where Timestamp > lookback
-  | where ActionType == "LogonSuccess";
-  failedLogons
-  | where FailCount >= 5
-  | join kind=inner successLogons on AccountName, DeviceName
-  | where Timestamp > LastFail
-  | project Timestamp, DeviceName, AccountName, FailCount, RemoteIP,
-            LogonType, LogonTypeName
-  | order by Timestamp desc
+  | summarize FailCount = count(), LastFail = max(Timestamp)
+      by AccountName, AccountDomain, DeviceName
+  | top 20 by FailCount
 tags:
   - T1110
   - T1078
   - credential-access
   - initial-access
-mde_portable: true
+mde_portable: false
 enabled: true
 created_at: 2025-01-01T00:00:00Z
 updated_at: 2025-01-01T00:00:00Z

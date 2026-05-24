@@ -10,8 +10,7 @@ query: |
   | where ActionType in ("WAFBlock", "FirewallBlock")
   | summarize BlockCount=count(), UniqueURIs=dcount(ClientRequestURI)
             by ClientIP, ClientCountry, FirewallRuleDescription
-  | where BlockCount > 20
-  | order by BlockCount desc
+  | top 10 by BlockCount
 tags:
   - T1190
   - initial-access
