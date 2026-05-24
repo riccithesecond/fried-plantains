@@ -52,7 +52,7 @@ Edit `.env` and set three required values:
 openssl rand -hex 32
 
 # Generate a bcrypt password hash
-python3 -c "from passlib.hash import bcrypt; print(bcrypt.hash('yourpassword'))"
+python3 -c "import bcrypt; print(bcrypt.hashpw(b'yourpassword', bcrypt.gensalt()).decode())"
 ```
 
 **2. Install dependencies**

@@ -25,7 +25,7 @@ if [ ! -f .env ]; then
     echo "  Then fill in:"
     echo "    SECRET_KEY          — openssl rand -hex 32"
     echo "    ADMIN_USERNAME      — any username"
-    echo "    ADMIN_PASSWORD_HASH — python3 -c \"from passlib.hash import bcrypt; print(bcrypt.hash('yourpassword'))\""
+    echo "    ADMIN_PASSWORD_HASH — python3 -c \"import bcrypt; print(bcrypt.hashpw(b'yourpassword', bcrypt.gensalt()).decode())\""
     exit 1
 fi
 ok ".env found."

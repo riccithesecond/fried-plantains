@@ -31,7 +31,7 @@ try {
         Write-Host "  Then fill in:" -ForegroundColor Yellow
         Write-Host "    SECRET_KEY          - openssl rand -hex 32"
         Write-Host "    ADMIN_USERNAME      - any username"
-        Write-Host "    ADMIN_PASSWORD_HASH - python -c ""from passlib.hash import bcrypt; print(bcrypt.hash('yourpassword'))"""
+        Write-Host "    ADMIN_PASSWORD_HASH - python -c ""import bcrypt; print(bcrypt.hashpw(b'yourpassword', bcrypt.gensalt()).decode())"""
         Read-Host "`n  Press Enter to close"
         exit 1
     }
