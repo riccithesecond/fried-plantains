@@ -21,7 +21,11 @@ def _load_rule_files() -> list[Path]:
     rules_dir = Path("detections/rules")
     if not rules_dir.exists():
         return []
-    return list(rules_dir.glob("FP-*.yaml"))
+    paths = list(rules_dir.glob("FP-*.yaml"))
+    synthetic_dir = rules_dir / "synthetic"
+    if synthetic_dir.exists():
+        paths.extend(synthetic_dir.glob("SYN-*.yaml"))
+    return paths
 
 
 def _extract_kql_column_refs(query: str) -> list[str]:
@@ -54,7 +58,7 @@ class TestSeedRules:
         import re
         with rule_path.open() as f:
             rule = yaml.safe_load(f)
-        assert re.match(r"^FP-\d{4}$", rule["id"]), f"Invalid ID format: {rule['id']}"
+        assert re.match(r"^(FP|SYN)-\d{4}$", rule["id"]), f"Invalid ID format: {rule['id']}"
 
     @pytest.mark.parametrize("rule_path", _load_rule_files())
     def test_mde_portable_rules_use_valid_columns(self, rule_path: Path):
