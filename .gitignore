@@ -24,6 +24,9 @@ frontend/dist/
 
 # Claude Code local settings
 .claude/
+.agents/
+skills-lock.json
+generated/
 
 # Editor
 .vscode/

@@ -95,16 +95,27 @@ class TestCaseInsensitiveOperators:
 
 
 class TestLetBindings:
-    def test_let_produces_cte(self):
+    def test_scalar_let_inlined(self):
+        # Scalar lets are substituted inline — no CTE wrapper needed or generated.
         sql = transpile(
-            "let suspicious = '-EncodedCommand';\n"
-            "DeviceProcessEvents | where ProcessCommandLine contains '-enc'"
+            "let lookback = ago(1h);\n"
+            "DeviceProcessEvents | where Timestamp > lookback"
         )
-        assert "WITH" in sql.upper()
+        assert "WITH" not in sql.upper()
+        assert "INTERVAL" in sql.upper()  # ago(1h) was inlined
 
-    def test_let_name_appears_in_sql(self):
+    def test_scalar_let_string_inlined(self):
         sql = transpile(
-            "let base_table = DeviceProcessEvents;\n"
+            "let suspicious = '-enc';\n"
+            "DeviceProcessEvents | where ProcessCommandLine contains suspicious"
+        )
+        assert "WITH" not in sql.upper()
+        assert "'-enc'" in sql  # string literal inlined at reference
+
+    def test_subquery_let_produces_cte(self):
+        # Sub-pipeline lets (Table | where ...) still become CTEs.
+        sql = transpile(
+            "let baseline = DeviceProcessEvents | where ActionType == 'ProcessCreated';\n"
             "DeviceProcessEvents | project DeviceName"
         )
         assert "WITH" in sql.upper()
@@ -337,11 +348,20 @@ class TestEmitResult:
         result = self._emit("DeviceProcessEvents | project DeviceName")
         assert result.render_hint is None
 
-    def test_cte_names_populated_from_let(self):
+    def test_cte_names_populated_from_subquery_let(self):
+        # Only sub-pipeline lets appear in cte_names; scalar lets are inlined.
         result = self._emit(
-            "let baseline = DeviceProcessEvents;\nDeviceProcessEvents | project DeviceName"
+            "let baseline = DeviceProcessEvents | where ActionType == 'ProcessCreated';\n"
+            "DeviceProcessEvents | project DeviceName"
         )
         assert "baseline" in result.cte_names
+
+    def test_scalar_let_not_in_cte_names(self):
+        result = self._emit(
+            "let lookback = ago(1h);\n"
+            "DeviceProcessEvents | where Timestamp > lookback"
+        )
+        assert "lookback" not in result.cte_names
 
     def test_warnings_is_list(self):
         result = self._emit("DeviceProcessEvents | project DeviceName")
@@ -922,3 +942,184 @@ class TestGetSchema:
         sql = transpile("DeviceProcessEvents | getschema")
         # At least one known DeviceProcessEvents column must appear in the schema output
         assert "DeviceName" in sql or "Timestamp" in sql or "FileName" in sql
+
+
+# ---------------------------------------------------------------------------
+# Transpiler gap fixes — post-summarize HAVING, scalar let, STRING[] has,
+# isempty/isnotempty function form, project after summarize
+# ---------------------------------------------------------------------------
+
+class TestPostSummarizeHaving:
+    """where after summarize must emit HAVING, not WHERE."""
+
+    def test_post_summarize_where_produces_having(self):
+        sql = transpile(
+            "DeviceLogonEvents"
+            " | summarize FailCount=count() by AccountName"
+            " | where FailCount > 10"
+        )
+        assert "HAVING" in sql.upper()
+        assert "FailCount > 10" in sql or "failcount > 10" in sql.lower()
+
+    def test_post_summarize_where_not_in_where_clause(self):
+        sql = transpile(
+            "DeviceLogonEvents"
+            " | summarize FailCount=count() by AccountName"
+            " | where FailCount > 5"
+        )
+        # The aggregate condition must NOT appear before GROUP BY
+        group_by_pos = sql.upper().find("GROUP BY")
+        having_pos = sql.upper().find("HAVING")
+        assert having_pos > group_by_pos
+
+    def test_pre_summarize_where_stays_in_where(self):
+        sql = transpile(
+            "DeviceLogonEvents"
+            " | where ActionType == 'LogonFailed'"
+            " | summarize FailCount=count() by AccountName"
+            " | where FailCount > 5"
+        )
+        assert "WHERE" in sql.upper()
+        assert "HAVING" in sql.upper()
+        where_pos = sql.upper().find("WHERE")
+        having_pos = sql.upper().find("HAVING")
+        assert where_pos < having_pos
+
+    def test_post_summarize_top_still_works(self):
+        # top after summarize should not require HAVING — just ORDER BY + LIMIT
+        sql = transpile(
+            "DeviceLogonEvents"
+            " | summarize FailCount=count() by AccountName"
+            " | top 20 by FailCount"
+        )
+        assert "ORDER BY" in sql.upper()
+        assert "LIMIT" in sql.upper()
+        assert "HAVING" not in sql.upper()
+
+
+class TestScalarLetInlining:
+    """Scalar lets must be inlined at reference sites, not wrapped in CTEs."""
+
+    def test_ago_scalar_let_inlined(self):
+        sql = transpile(
+            "let lookback = ago(1h);\n"
+            "DeviceLogonEvents | where Timestamp > lookback"
+        )
+        assert "INTERVAL" in sql.upper()
+        assert "WITH" not in sql.upper()
+
+    def test_scalar_let_substituted_in_where(self):
+        sql = transpile(
+            "let lookback = ago(7d);\n"
+            "DeviceProcessEvents | where Timestamp > lookback"
+        )
+        assert "INTERVAL 7 DAY" in sql.upper()
+
+    def test_string_scalar_let_inlined(self):
+        sql = transpile(
+            "let enc = '-enc';\n"
+            "DeviceProcessEvents | where ProcessCommandLine contains enc"
+        )
+        assert "WITH" not in sql.upper()
+        assert "'-enc'" in sql
+
+    def test_subquery_let_still_a_cte(self):
+        sql = transpile(
+            "let failures = DeviceLogonEvents | where ActionType == 'LogonFailed';\n"
+            "DeviceProcessEvents | project DeviceName"
+        )
+        assert "WITH" in sql.upper()
+        assert "failures" in sql
+
+
+class TestStringListColumnOperators:
+    """has / has_any / contains on STRING[] columns must use list functions, not LIKE."""
+
+    def test_has_on_string_array_uses_list_contains(self):
+        # ThreatTypes is STRING[] in EmailEvents
+        sql = transpile(
+            "EmailEvents | where ThreatTypes has 'Phish'"
+        )
+        assert "list_contains" in sql.lower()
+        assert "list_transform" in sql.lower()
+        assert "LOWER" in sql.upper()
+
+    def test_has_on_scalar_string_uses_like(self):
+        # ProcessCommandLine is STRING — must still use LIKE
+        sql = transpile(
+            "DeviceProcessEvents | where ProcessCommandLine has 'encoded'"
+        )
+        assert "LIKE" in sql.upper()
+        assert "list_contains" not in sql.lower()
+
+    def test_has_any_on_string_array_uses_list_contains(self):
+        sql = transpile(
+            "EmailEvents | where ThreatTypes has_any ('Phish', 'Malware')"
+        )
+        assert "list_contains" in sql.lower()
+        assert "LIKE" not in sql.upper()
+
+    def test_contains_on_string_array_uses_list_filter(self):
+        sql = transpile(
+            "EmailEvents | where ThreatTypes contains 'Phish'"
+        )
+        assert "list_filter" in sql.lower()
+        assert "list_transform" in sql.lower()
+
+
+class TestIsEmptyFunctionForm:
+    """isempty(col) and isnotempty(col) function form must parse and emit correctly."""
+
+    def test_isnotempty_function_form(self):
+        sql = transpile(
+            "EmailAttachmentInfo | where isnotempty(MalwareFamily)"
+        )
+        assert "IS NOT NULL" in sql.upper()
+        assert "MalwareFamily" in sql
+
+    def test_isempty_function_form(self):
+        sql = transpile(
+            "DeviceProcessEvents | where isempty(SHA256)"
+        )
+        assert "IS NULL" in sql.upper()
+        assert "SHA256" in sql
+
+    def test_isnotempty_function_form_equivalent_to_postfix(self):
+        sql_fn = transpile("DeviceProcessEvents | where isnotempty(SHA256)")
+        sql_postfix = transpile("DeviceProcessEvents | where SHA256 isnotempty()")
+        # Both forms must produce semantically equivalent SQL
+        assert "IS NOT NULL" in sql_fn.upper()
+        assert "IS NOT NULL" in sql_postfix.upper()
+
+
+class TestProjectAfterSummarize:
+    """project after summarize must wrap the aggregate in a subquery."""
+
+    def test_project_after_summarize_produces_subquery(self):
+        sql = transpile(
+            "DeviceLogonEvents"
+            " | summarize FailCount=count() by AccountName, DeviceName"
+            " | project AccountName, FailCount"
+        )
+        # Subquery wrapper must be present
+        assert "FROM (" in sql or "from (" in sql.lower()
+
+    def test_project_after_summarize_selects_correct_columns(self):
+        sql = transpile(
+            "DeviceLogonEvents"
+            " | summarize FailCount=count() by AccountName"
+            " | project AccountName, FailCount"
+        )
+        assert "AccountName" in sql
+        assert "FailCount" in sql
+
+    def test_project_after_summarize_with_top(self):
+        sql = transpile(
+            "DeviceLogonEvents"
+            " | summarize FailCount=count() by AccountName"
+            " | project AccountName, FailCount"
+            " | top 10 by FailCount"
+        )
+        assert "FROM (" in sql or "from (" in sql.lower()
+        assert "ORDER BY" in sql.upper()
+        assert "LIMIT" in sql.upper()

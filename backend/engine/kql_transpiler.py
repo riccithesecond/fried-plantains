@@ -49,12 +49,12 @@ COVERAGE: dict[str, str] = {
     "contains": "supported — case-insensitive via LOWER/LIKE",
     "startswith": "supported — LOWER/LIKE prefix match",
     "endswith": "supported — LOWER/LIKE suffix match",
-    "has": "supported — word-boundary approximation via LOWER/LIKE",
-    "has_any()": "supported — multi-value OR LIKE expansion",
+    "has": "supported — LOWER/LIKE for scalar STRING; list_contains for STRING[] columns",
+    "has_any()": "supported — LOWER/LIKE for scalar STRING; list_contains for STRING[] columns",
     "matches regex": "supported → regexp_matches()",
     "in": "supported → IN (...)",
     "!in": "supported → NOT IN (...)",
-    "isempty() / isnotempty()": "supported → IS NULL / IS NOT NULL checks",
+    "isempty() / isnotempty()": "supported — both `col isempty()` predicate form and `isempty(col)` function form",
     "toupper() / tolower()": "supported → UPPER() / LOWER()",
     "tostring() / toint() / tolong()": "supported → CAST()",
     "strcat()": "supported → CONCAT()",
@@ -65,7 +65,7 @@ COVERAGE: dict[str, str] = {
     "join kind=leftouter": "supported → LEFT JOIN",
     "join kind=leftanti": "supported → LEFT JOIN ... WHERE right IS NULL",
     "union": "supported → UNION ALL",
-    "let (scalar)": "supported → CTE scalar value",
+    "let (scalar)": "supported → SQL expression inlined at reference site (not wrapped in CTE)",
     "let (sub-pipeline)": "supported → CTE from recursively transpiled sub-query",
     "top N by col": "supported → ORDER BY ... LIMIT N",
     "order by / sort by": "supported → ORDER BY ASC/DESC",
@@ -424,6 +424,7 @@ class LetBinding:
     """let name = expression; — stored as SQL string after recursive transpilation."""
     name: str
     expression: str  # SQL string — either a scalar value or a sub-query
+    is_scalar: bool = False  # True: inline at reference site; False: wrap in CTE
 
 
 @dataclass
@@ -663,11 +664,22 @@ class KqlParser:
         if first_word in MDE_TABLES and "|" in raw_expr:
             try:
                 sql_expr = KqlTranspiler.transpile(raw_expr)
-                return LetBinding(name=name_tok.value, expression=sql_expr)
+                return LetBinding(name=name_tok.value, expression=sql_expr, is_scalar=False)
             except Exception:
                 pass
 
-        return LetBinding(name=name_tok.value, expression=raw_expr)
+        # Scalar let: transpile the KQL expression to a SQL fragment for inline
+        # substitution. This prevents wrapping scalars in invalid CTEs like:
+        # lookback AS (ago(1h)) — a CTE must contain a SELECT statement.
+        try:
+            scalar_tokens = KqlTokenizer(raw_expr.strip()).tokenize()
+            scalar_expr = KqlParser(scalar_tokens)._parse_expression()
+            sql_scalar = SqlEmitter()._emit_expr(scalar_expr)
+            return LetBinding(name=name_tok.value, expression=sql_scalar, is_scalar=True)
+        except Exception:
+            pass
+
+        return LetBinding(name=name_tok.value, expression=raw_expr, is_scalar=True)
 
     # --- Stage parsers ---
 
@@ -1108,6 +1120,13 @@ class KqlParser:
                 self._expect(TT.RPAREN)
                 return col  # parse_json is a no-op at expression level; json_extract at access
 
+            if value in ("isempty", "isnotempty"):
+                self._advance()
+                self._expect(TT.LPAREN)
+                col = self._parse_expression()
+                self._expect(TT.RPAREN)
+                return FunctionCall(value, [col])
+
             # Column reference — possibly dotted (AdditionalFields.Key)
             self._advance()
             col_name = tok.value
@@ -1292,38 +1311,59 @@ class SchemaValidator:
 class SqlEmitter:
     """Converts a KqlPipeline AST to DuckDB SQL, returning an EmitResult."""
 
+    def __init__(self) -> None:
+        self._table: str = ""
+        self._scalar_lets: dict[str, str] = {}
+
     def emit(self, pipeline: KqlPipeline, warnings: Optional[list] = None) -> EmitResult:
         table = pipeline.table
-        if table not in MDE_TABLES and table not in MDE_TABLES:
+        self._table = table
+        if table not in MDE_TABLES:
             logger.debug("KQL references unknown table: %s", table)
 
+        # Scalar lets are inlined at each reference site; sub-query lets become CTEs.
         ctes: list[str] = []
         cte_names: list[str] = []
+        self._scalar_lets = {}
         for let in pipeline.lets:
-            ctes.append(f"{let.name} AS ({let.expression})")
-            cte_names.append(let.name)
+            if let.is_scalar:
+                self._scalar_lets[let.name] = let.expression
+            else:
+                ctes.append(f"{let.name} AS ({let.expression})")
+                cte_names.append(let.name)
 
         select_clause = "*"
         where_clauses: list[str] = []
+        having_clauses: list[str] = []
         group_by: Optional[str] = None
         order_by: Optional[str] = None
         limit_clause: Optional[str] = None
         distinct = False
+        _saw_summarize = False
+        _post_summarize_project: Optional[ProjectStage] = None
 
         for stage in pipeline.stages:
             if isinstance(stage, WhereStage):
-                where_clauses.append(self._emit_expr(stage.predicate))
+                clause = self._emit_expr(stage.predicate)
+                if _saw_summarize:
+                    # Aggregate filter after summarize must be HAVING, not WHERE.
+                    having_clauses.append(clause)
+                else:
+                    where_clauses.append(clause)
 
             elif isinstance(stage, ProjectStage):
-                parts = [self._emit_assignment_as_select(a) for a in stage.columns]
-                select_clause = ", ".join(parts)
+                if _saw_summarize:
+                    # Deferred: apply as outer SELECT over the summarize subquery.
+                    _post_summarize_project = stage
+                else:
+                    parts = [self._emit_assignment_as_select(a) for a in stage.columns]
+                    select_clause = ", ".join(parts)
 
             elif isinstance(stage, ProjectAwayStage):
                 tbl = MDE_TABLES.get(table)
                 if tbl:
                     kept = [c.name for c in tbl.columns if c.name not in stage.columns]
                     select_clause = ", ".join(kept) if kept else "*"
-                # Unknown table — leave select_clause as "*"
 
             elif isinstance(stage, ExtendStage):
                 parts = [self._emit_assignment_as_select(a) for a in stage.assignments]
@@ -1340,6 +1380,7 @@ class SqlEmitter:
                     group_by = ", ".join(by_parts)
                 else:
                     select_clause = ", ".join(agg_parts)
+                _saw_summarize = True
 
             elif isinstance(stage, OrderStage):
                 parts = [f"{col} {direction.upper()}" for col, direction in stage.columns]
@@ -1359,13 +1400,11 @@ class SqlEmitter:
 
             elif isinstance(stage, MvExpandStage):
                 col = stage.column
-                where_clauses.append(f"1=1")  # placeholder; real expansion via CROSS JOIN
-                select_clause = f"*, t_{col}.{col}"
-                # Append CROSS JOIN to FROM — handled in SQL assembly below
                 sql = self._assemble_sql(
                     select_clause="*",
                     table=table,
-                    where_clauses=where_clauses[:-1],
+                    where_clauses=where_clauses,
+                    having_clauses=[],
                     group_by=None,
                     order_by=None,
                     limit_clause=None,
@@ -1439,17 +1478,33 @@ class SqlEmitter:
                     cte_names=cte_names,
                 )
 
-        sql = self._assemble_sql(
+        # When project follows summarize, the aggregate aliases are not visible in
+        # a flat SELECT — wrap the summarize result in a subquery first.
+        inner_sql = self._assemble_sql(
             select_clause=select_clause,
             table=table,
             where_clauses=where_clauses,
+            having_clauses=having_clauses,
             group_by=group_by,
-            order_by=order_by,
-            limit_clause=limit_clause,
+            order_by=None if _post_summarize_project else order_by,
+            limit_clause=None if _post_summarize_project else limit_clause,
             distinct=distinct,
             extra_join=None,
             ctes=ctes,
         )
+
+        if _post_summarize_project:
+            projected = ", ".join(
+                self._emit_assignment_as_select(a) for a in _post_summarize_project.columns
+            )
+            sql = f"SELECT {projected}\nFROM ({inner_sql}) _s"
+            if order_by:
+                sql += f"\nORDER BY {order_by}"
+            if limit_clause:
+                sql += f"\nLIMIT {limit_clause}"
+        else:
+            sql = inner_sql
+
         return EmitResult(
             sql=sql,
             render_hint=pipeline.render_hint,
@@ -1462,6 +1517,7 @@ class SqlEmitter:
         select_clause: str,
         table: str,
         where_clauses: list[str],
+        having_clauses: list[str],
         group_by: Optional[str],
         order_by: Optional[str],
         limit_clause: Optional[str],
@@ -1478,6 +1534,9 @@ class SqlEmitter:
             sql += f"\nWHERE {combined}"
         if group_by:
             sql += f"\nGROUP BY {group_by}"
+        if having_clauses:
+            combined = " AND ".join(f"({c})" for c in having_clauses)
+            sql += f"\nHAVING {combined}"
         if order_by:
             sql += f"\nORDER BY {order_by}"
         if limit_clause:
@@ -1485,6 +1544,16 @@ class SqlEmitter:
         if ctes:
             sql = f"WITH {', '.join(ctes)}\n{sql}"
         return sql
+
+    def _is_string_list_column(self, col_name: str) -> bool:
+        """Return True if col_name is a STRING[] column in the current table's schema."""
+        table_def = MDE_TABLES.get(self._table)
+        if table_def is None:
+            return False
+        for col in table_def.columns:
+            if col.name == col_name and col.dtype == "STRING[]":
+                return True
+        return False
 
     def _emit_assignment_as_select(self, a: Assignment) -> str:
         expr_str = self._emit_expr(a.expr)
@@ -1497,6 +1566,9 @@ class SqlEmitter:
         if isinstance(expr, ColumnRef):
             if expr.path:
                 return f"json_extract({expr.column}, '$.{expr.path}')"
+            # Inline scalar let bindings — substituted here instead of wrapped in a CTE.
+            if expr.column in self._scalar_lets:
+                return f"({self._scalar_lets[expr.column]})"
             return expr.column
 
         if isinstance(expr, Literal):
@@ -1574,13 +1646,21 @@ class SqlEmitter:
 
         if name == "has_any":
             # args[0] is the column expr; args[1:] are the values to match
-            col = self._emit_expr(args[0])
+            col_node = args[0] if args else None
+            col = self._emit_expr(args[0]) if args else ""
             if len(args) < 2:
                 return "FALSE"
-            parts = [
-                f"LOWER({col}) LIKE LOWER(CONCAT('%', {self._emit_expr(v)}, '%'))"
-                for v in args[1:]
-            ]
+            if col_node and isinstance(col_node, ColumnRef) and self._is_string_list_column(col_node.column):
+                # STRING[] column: case-insensitive element membership for each value
+                parts = [
+                    f"list_contains(list_transform({col}, x -> LOWER(x)), LOWER({self._emit_expr(v)}))"
+                    for v in args[1:]
+                ]
+            else:
+                parts = [
+                    f"LOWER({col}) LIKE LOWER(CONCAT('%', {self._emit_expr(v)}, '%'))"
+                    for v in args[1:]
+                ]
             return " OR ".join(parts)
 
         if name == "isempty":
@@ -1629,12 +1709,21 @@ class SqlEmitter:
         if op == ">=":
             return f"{left} >= {right}"
         if op == "contains":
+            if isinstance(expr.left, ColumnRef) and self._is_string_list_column(expr.left.column):
+                # STRING[] column: substring match on any element (case-insensitive)
+                return (
+                    f"len(list_filter(list_transform({left}, x -> LOWER(x)), "
+                    f"x -> x LIKE LOWER(CONCAT('%', {right}, '%')))) > 0"
+                )
             return f"LOWER({left}) LIKE LOWER(CONCAT('%', {right}, '%'))"
         if op == "startswith":
             return f"LOWER({left}) LIKE LOWER(CONCAT({right}, '%'))"
         if op == "endswith":
             return f"LOWER({left}) LIKE LOWER(CONCAT('%', {right}))"
         if op == "has":
+            if isinstance(expr.left, ColumnRef) and self._is_string_list_column(expr.left.column):
+                # STRING[] column: case-insensitive element membership (word-boundary in MDE ≈ equals here)
+                return f"list_contains(list_transform({left}, x -> LOWER(x)), LOWER({right}))"
             return f"LOWER({left}) LIKE LOWER(CONCAT('%', {right}, '%'))"
         if op == "matches regex":
             return f"regexp_matches({left}, {right})"
