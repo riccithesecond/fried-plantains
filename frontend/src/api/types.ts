@@ -28,6 +28,7 @@ export interface IDetectionRule {
   query: string;
   tags: string[];
   mde_portable: boolean;
+  synthetic: boolean;
   enabled: boolean;
   created_at: string;
   updated_at: string;
