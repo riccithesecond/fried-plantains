@@ -148,6 +148,10 @@ def _detect_mime_fallback(header_bytes: bytes) -> str:
     """Minimal magic byte detection when libmagic is unavailable."""
     if header_bytes[:2] == b"\x1f\x8b":
         return "application/gzip"
+    # ELF binaries: magic bytes 7f 45 4c 46 — \x7f is valid UTF-8 so must check
+    # before the text fallback or ELF files would be misclassified as text/plain.
+    if header_bytes[:4] == b"\x7fELF":
+        return "application/octet-stream"
     stripped = header_bytes.lstrip(b" \t\r\n")
     if stripped.startswith(b"{") or stripped.startswith(b"["):
         return "application/json"

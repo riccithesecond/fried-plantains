@@ -84,7 +84,8 @@ class TestNormalizer:
         with pytest.raises(SchemaException):
             normalize({"Timestamp": "2025-01-15T14:00:00Z"}, "NonExistentTable")
 
-    def test_timestamp_normalized_to_iso(self):
+    def test_timestamp_normalized_to_datetime(self):
+        from datetime import datetime
         event = {
             "Timestamp": "2025-01-15 14:00:00",
             "DeviceId": "abc123",
@@ -94,7 +95,9 @@ class TestNormalizer:
             "ProcessId": 100,
         }
         result = normalize(event, "DeviceProcessEvents")
-        assert "T" in result["Timestamp"]  # ISO 8601 format
+        # Normalizer returns datetime objects so pyarrow writes TIMESTAMP, not VARCHAR
+        assert isinstance(result["Timestamp"], datetime)
+        assert result["Timestamp"].year == 2025
 
     def test_extra_fields_go_to_additional_fields(self):
         event = {
