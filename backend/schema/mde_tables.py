@@ -624,12 +624,441 @@ _ABNORMAL_CASE_EVENTS = MdeTable(
 
 
 # ---------------------------------------------------------------------------
+# Core device telemetry — additional tables
+# ---------------------------------------------------------------------------
+
+_DEVICE_IMAGE_LOAD_EVENTS = MdeTable(
+    name="DeviceImageLoadEvents",
+    description="DLL and module load events — critical for detecting DLL hijacking and reflective injection",
+    columns=(
+        MdeColumn("Timestamp",                       "TIMESTAMP", False, "UTC event timestamp"),
+        MdeColumn("DeviceId",                        "STRING",    False, "Unique device identifier"),
+        MdeColumn("DeviceName",                      "STRING",    False, "Device hostname"),
+        MdeColumn("ActionType",                      "STRING",    False, "ImageLoaded"),
+        MdeColumn("FileName",                        "STRING",    False, "Name of the loaded module or DLL"),
+        MdeColumn("FolderPath",                      "STRING",    False, "Full path to the loaded module"),
+        MdeColumn("SHA1",                            "STRING",    False, "SHA-1 hash of the loaded file"),
+        MdeColumn("SHA256",                          "STRING",    False, "SHA-256 hash of the loaded file"),
+        MdeColumn("MD5",                             "STRING",    False, "MD5 hash of the loaded file"),
+        MdeColumn("IsSigned",                        "BOOLEAN",   False, "Whether the file carries a digital signature"),
+        MdeColumn("IsCodeSigningCertValid",           "BOOLEAN",   True,  "Whether the code signing certificate chain is valid"),
+        MdeColumn("Signer",                          "STRING",    True,  "Entity that signed the file"),
+        MdeColumn("SignerHash",                      "STRING",    True,  "Hash of the signing certificate"),
+        MdeColumn("Issuer",                          "STRING",    True,  "Certificate issuing CA"),
+        MdeColumn("IssuerHash",                      "STRING",    True,  "Hash of the issuer certificate"),
+        MdeColumn("InitiatingProcessFileName",       "STRING",    False, "Process that triggered the load"),
+        MdeColumn("InitiatingProcessId",             "INT",       False, "PID of the initiating process"),
+        MdeColumn("InitiatingProcessCommandLine",    "STRING",    False, "Command line of the initiating process"),
+        MdeColumn("InitiatingProcessAccountName",    "STRING",    False, "Account running the initiating process"),
+        MdeColumn("InitiatingProcessSHA256",         "STRING",    False, "SHA-256 of the initiating process binary"),
+        MdeColumn("InitiatingProcessParentId",       "INT",       True,  "PID of the initiating process parent"),
+        MdeColumn("InitiatingProcessParentFileName", "STRING",    True,  "Filename of the initiating process parent"),
+        MdeColumn("ReportId",                        "STRING",    False, "Unique event identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "DeviceId", "DeviceName", "ActionType", "FileName", "ReportId",
+    }),
+)
+
+_DEVICE_INFO = MdeTable(
+    name="DeviceInfo",
+    description="Device inventory snapshot — OS, domain join state, sensor version, and merged device identifiers",
+    columns=(
+        MdeColumn("Timestamp",          "TIMESTAMP", False, "UTC snapshot timestamp"),
+        MdeColumn("DeviceId",           "STRING",    False, "Unique device identifier"),
+        MdeColumn("DeviceName",         "STRING",    False, "Device hostname"),
+        MdeColumn("ClientVersion",      "STRING",    False, "MDE sensor version installed on the device"),
+        MdeColumn("PublicIP",           "STRING",    True,  "Last observed public IP"),
+        MdeColumn("OSArchitecture",     "STRING",    False, "x64 | x86 | arm64"),
+        MdeColumn("OSPlatform",         "STRING",    False, "Windows10 | Windows11 | WindowsServer2019 | macOS | Linux | etc."),
+        MdeColumn("OSBuild",            "INT",       True,  "OS build number"),
+        MdeColumn("OSVersion",          "STRING",    True,  "OS version string"),
+        MdeColumn("OSDistribution",     "STRING",    True,  "Linux distribution name, if applicable"),
+        MdeColumn("OSVersionInfo",      "STRING",    True,  "Additional OS version detail string"),
+        MdeColumn("IsAzureADJoined",    "BOOLEAN",   False, "True if device is Azure AD joined"),
+        MdeColumn("AadDeviceId",        "STRING",    True,  "Azure AD device object ID"),
+        MdeColumn("LoggedOnUsers",      "JSON",      True,  "JSON array of currently logged-on user objects"),
+        MdeColumn("RegistryDeviceTag",  "STRING",    True,  "Device tag written via registry"),
+        MdeColumn("DeviceCategory",     "STRING",    True,  "Endpoint | Server | NetworkDevice | IoT | etc."),
+        MdeColumn("DeviceType",         "STRING",    True,  "Workstation | Server | DomainController | etc."),
+        MdeColumn("DeviceSubtype",      "STRING",    True,  "Additional device subtype classification"),
+        MdeColumn("MergedDeviceIds",    "STRING[]",  True,  "Previous DeviceId values merged into this record"),
+        MdeColumn("MergedToDeviceId",   "STRING",    True,  "DeviceId this record was merged into, if applicable"),
+        MdeColumn("ReportId",           "STRING",    False, "Unique event identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "DeviceId", "DeviceName", "ReportId",
+    }),
+)
+
+_DEVICE_NETWORK_INFO = MdeTable(
+    name="DeviceNetworkInfo",
+    description="Network adapter configuration snapshot — MAC, IPs, DNS, gateway per adapter per device",
+    columns=(
+        MdeColumn("Timestamp",              "TIMESTAMP", False, "UTC snapshot timestamp"),
+        MdeColumn("DeviceId",               "STRING",    False, "Unique device identifier"),
+        MdeColumn("DeviceName",             "STRING",    False, "Device hostname"),
+        MdeColumn("NetworkAdapterId",       "STRING",    False, "Unique identifier for this network adapter"),
+        MdeColumn("NetworkAdapterName",     "STRING",    False, "Adapter name (e.g. Ethernet0, Wi-Fi)"),
+        MdeColumn("MacAddress",             "STRING",    False, "MAC address of the adapter"),
+        MdeColumn("NetworkAdapterType",     "STRING",    False, "Ethernet | WiFi | Loopback | Tunnel | etc."),
+        MdeColumn("NetworkAdapterStatus",   "STRING",    False, "Up | Down | NotPresent | Disconnected"),
+        MdeColumn("TunnelType",             "STRING",    True,  "VPN tunnel type if adapter is a tunnel"),
+        MdeColumn("IPv4Dhcp",               "STRING",    True,  "IPv4 DHCP server address"),
+        MdeColumn("IPv6Dhcp",               "STRING",    True,  "IPv6 DHCP server address"),
+        MdeColumn("DefaultGateways",        "STRING[]",  True,  "Default gateway IP addresses for this adapter"),
+        MdeColumn("IPAddresses",            "JSON",      True,  "JSON array of IP address and subnet configurations"),
+        MdeColumn("DNSAddresses",           "STRING[]",  True,  "Configured DNS server addresses"),
+        MdeColumn("ConnectedNetworks",      "JSON",      True,  "Network profile objects connected via this adapter"),
+        MdeColumn("NetworkAdapterVendor",   "STRING",    True,  "Hardware vendor of the network adapter"),
+        MdeColumn("ReportId",               "STRING",    False, "Unique event identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "DeviceId", "DeviceName", "NetworkAdapterId", "MacAddress", "ReportId",
+    }),
+)
+
+_DEVICE_FILE_CERTIFICATE_INFO = MdeTable(
+    name="DeviceFileCertificateInfo",
+    description="Code-signing certificate details for files observed on devices — enables allow/block by cert chain",
+    columns=(
+        MdeColumn("Timestamp",                       "TIMESTAMP", False, "UTC event timestamp"),
+        MdeColumn("DeviceId",                        "STRING",    False, "Unique device identifier"),
+        MdeColumn("DeviceName",                      "STRING",    False, "Device hostname"),
+        MdeColumn("SHA1",                            "STRING",    False, "SHA-1 of the signed file — join key to other Device tables"),
+        MdeColumn("IsSigned",                        "BOOLEAN",   False, "Whether the file carries a digital signature"),
+        MdeColumn("SignatureType",                   "STRING",    False, "Embedded | Catalog | None"),
+        MdeColumn("IsCodeSigningCertValid",           "BOOLEAN",   True,  "Whether the signing certificate chain is valid"),
+        MdeColumn("Signer",                          "STRING",    True,  "Signer entity name"),
+        MdeColumn("SignerHash",                      "STRING",    True,  "Hash of the signing certificate"),
+        MdeColumn("Issuer",                          "STRING",    True,  "Issuing CA name"),
+        MdeColumn("IssuerHash",                      "STRING",    True,  "Hash of the issuer certificate"),
+        MdeColumn("CertificateSerialNumber",         "STRING",    True,  "Certificate serial number"),
+        MdeColumn("CrlDistributionPointUrls",        "STRING[]",  True,  "Certificate revocation list (CRL) URLs"),
+        MdeColumn("CertificateCreationTime",         "TIMESTAMP", True,  "Certificate valid-from timestamp"),
+        MdeColumn("CertificateExpirationTime",       "TIMESTAMP", True,  "Certificate valid-until timestamp"),
+        MdeColumn("CertificateCountersignatureTime", "TIMESTAMP", True,  "Authenticode countersignature timestamp"),
+        MdeColumn("IsRootSignerMicrosoft",           "BOOLEAN",   True,  "True if the certificate root is Microsoft"),
+        MdeColumn("IsTestSigningEnabled",            "BOOLEAN",   True,  "True if test signing mode is active on the device"),
+        MdeColumn("ReportId",                        "STRING",    False, "Unique event identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "DeviceId", "DeviceName", "SHA1", "IsSigned", "ReportId",
+    }),
+)
+
+
+# ---------------------------------------------------------------------------
+# Microsoft Defender for Office 365 (MDO) email tables
+#
+# Email flows through this organization in three stages:
+#   1. Proofpoint (initial gateway) — ProofpointMessageEvents / ProofpointClickEvents
+#   2. Abnormal Security (post-gateway AI) — AbnormalThreatEvents / AbnormalCaseEvents
+#   3. MDO (Exchange Online, final disposition) — EmailEvents / EmailPostDeliveryEvents / etc.
+#
+# NetworkMessageId (RFC 2822 Message-ID) is the primary join key across all three
+# layers. An email blocked by Proofpoint will never appear in EmailEvents.
+# ---------------------------------------------------------------------------
+
+_EMAIL_EVENTS = MdeTable(
+    name="EmailEvents",
+    description="MDO email events — one row per message received by Exchange Online after gateway filtering",
+    columns=(
+        MdeColumn("Timestamp",             "TIMESTAMP", False, "Email receipt timestamp (UTC)"),
+        MdeColumn("NetworkMessageId",      "STRING",    False, "RFC 2822 Message-ID — primary join key across all email tables"),
+        MdeColumn("InternetMessageId",     "STRING",    False, "Internet message ID (matches NetworkMessageId in most cases)"),
+        MdeColumn("SenderFromAddress",     "STRING",    False, "5322.From header address"),
+        MdeColumn("SenderFromDomain",      "STRING",    False, "Domain extracted from 5322.From"),
+        MdeColumn("SenderDisplayName",     "STRING",    False, "Display name shown in the From header"),
+        MdeColumn("SenderIPv4",            "STRING",    True,  "Sending MTA IPv4 address"),
+        MdeColumn("SenderIPv6",            "STRING",    True,  "Sending MTA IPv6 address"),
+        MdeColumn("SenderMailFromAddress", "STRING",    False, "5321.MailFrom (envelope sender)"),
+        MdeColumn("SenderMailFromDomain",  "STRING",    False, "Domain of the envelope sender"),
+        MdeColumn("RecipientEmailAddress", "STRING",    False, "Primary recipient email address"),
+        MdeColumn("RecipientObjectId",     "STRING",    True,  "Azure AD object ID of the recipient"),
+        MdeColumn("Subject",               "STRING",    False, "Email subject line"),
+        MdeColumn("ConfidenceLevel",       "STRING",    False, "None | Low | Normal | High — MDO confidence in the verdict"),
+        MdeColumn("DeliveryAction",        "STRING",    False, "Delivered | Blocked | Replaced | Quarantined"),
+        MdeColumn("DeliveryLocation",      "STRING",    False, "Inbox | JunkFolder | DeletedItems | Quarantine | External | Failed | Dropped | Forwarded"),
+        MdeColumn("EmailActionPolicy",     "STRING",    True,  "Anti-spam or anti-phish policy that determined the final action"),
+        MdeColumn("EmailActionPolicyGuid", "STRING",    True,  "GUID of the governing policy"),
+        MdeColumn("AttachmentCount",       "INT",       False, "Number of attachments on the message"),
+        MdeColumn("UrlCount",              "INT",       False, "Number of URLs found in the message body"),
+        MdeColumn("EmailLanguage",         "STRING",    True,  "Detected language of the email body"),
+        MdeColumn("AuthenticationDetails", "JSON",      False, "SPF, DKIM, DMARC, and CompAuth verdicts as a JSON object"),
+        MdeColumn("ThreatNames",           "STRING[]",  True,  "Threat names identified by MDO engines"),
+        MdeColumn("ThreatTypes",           "STRING[]",  True,  "Phish | Malware | Spam | etc."),
+        MdeColumn("DetectionMethods",      "JSON",      True,  "MDO detection engines and signals that flagged this message"),
+        MdeColumn("OrgLevelPolicy",        "STRING",    True,  "Org-level policy that determined the action"),
+        MdeColumn("OrgLevelAction",        "STRING",    True,  "Action taken at the org level"),
+        MdeColumn("UserLevelPolicy",       "STRING",    True,  "User-level policy override if applicable"),
+        MdeColumn("UserLevelAction",       "STRING",    True,  "Action taken at the user level"),
+        MdeColumn("Directionality",        "STRING",    False, "Inbound | Outbound | Intraorg"),
+        MdeColumn("Connectors",            "STRING",    True,  "Inbound connector name used for delivery"),
+        MdeColumn("ReportId",              "STRING",    False, "Unique event identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "NetworkMessageId", "SenderFromAddress", "RecipientEmailAddress",
+        "DeliveryAction", "Directionality", "ReportId",
+    }),
+)
+
+_EMAIL_ATTACHMENT_INFO = MdeTable(
+    name="EmailAttachmentInfo",
+    description="MDO attachment metadata — one row per attachment per message; join to EmailEvents on NetworkMessageId",
+    columns=(
+        MdeColumn("Timestamp",             "TIMESTAMP", False, "Email receipt timestamp (UTC)"),
+        MdeColumn("NetworkMessageId",      "STRING",    False, "Message-ID — join key to EmailEvents"),
+        MdeColumn("SenderFromAddress",     "STRING",    False, "Sender email address"),
+        MdeColumn("RecipientEmailAddress", "STRING",    False, "Recipient email address"),
+        MdeColumn("FileName",              "STRING",    False, "Attachment filename"),
+        MdeColumn("FileType",              "STRING",    True,  "File extension or detected MIME type"),
+        MdeColumn("SHA256",                "STRING",    True,  "SHA-256 of the attachment — join to DeviceFileEvents for endpoint correlation"),
+        MdeColumn("MalwareFamily",         "STRING",    True,  "Malware family name if MDO identified malware"),
+        MdeColumn("ThreatNames",           "STRING[]",  True,  "Threat names identified by MDO"),
+        MdeColumn("ThreatTypes",           "STRING[]",  True,  "Phish | Malware | etc."),
+        MdeColumn("DetectionMethods",      "JSON",      True,  "Detection methods that flagged this attachment"),
+        MdeColumn("ReportId",              "STRING",    False, "Unique event identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "NetworkMessageId", "FileName", "ReportId",
+    }),
+)
+
+_EMAIL_POST_DELIVERY_EVENTS = MdeTable(
+    name="EmailPostDeliveryEvents",
+    description="MDO post-delivery actions — ZAP, admin remediations, and retroactive policy enforcement",
+    columns=(
+        MdeColumn("Timestamp",             "TIMESTAMP", False, "Time the post-delivery action occurred (UTC)"),
+        MdeColumn("NetworkMessageId",      "STRING",    False, "Message-ID — join key to EmailEvents"),
+        MdeColumn("InternetMessageId",     "STRING",    False, "Internet message ID"),
+        MdeColumn("SenderFromAddress",     "STRING",    False, "Sender email address"),
+        MdeColumn("RecipientEmailAddress", "STRING",    False, "Recipient email address"),
+        MdeColumn("RecipientObjectId",     "STRING",    True,  "Azure AD object ID of the recipient"),
+        MdeColumn("DeliveryLocation",      "STRING",    False, "Mailbox folder where the message resided before the action"),
+        MdeColumn("Action",                "STRING",    False, "Deleted | Moved | Replaced | Cleared"),
+        MdeColumn("ActionType",            "STRING",    False, "ZAP | ManualRemediation | AdminActionRetroactivelyApplied | SystemTimeTravel"),
+        MdeColumn("ActionTrigger",         "STRING",    False, "ZAP | Admin | AutoRemediation | SystemTimeTravel"),
+        MdeColumn("ActionResult",          "STRING",    False, "Success | Failed | Blocked | Replaced"),
+        MdeColumn("DeliveryTimestamp",     "TIMESTAMP", True,  "When the message was originally delivered to the mailbox"),
+        MdeColumn("ReportId",              "STRING",    False, "Unique event identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "NetworkMessageId", "Action", "ActionType", "ActionResult", "ReportId",
+    }),
+)
+
+_EMAIL_URL_INFO = MdeTable(
+    name="EmailUrlInfo",
+    description="MDO URL extraction — one row per URL per message; join to UrlClickEvents on Url + NetworkMessageId",
+    columns=(
+        MdeColumn("Timestamp",        "TIMESTAMP", False, "Email receipt timestamp (UTC)"),
+        MdeColumn("NetworkMessageId", "STRING",    False, "Message-ID — join key to EmailEvents and UrlClickEvents"),
+        MdeColumn("Url",              "STRING",    False, "Full URL found in the message"),
+        MdeColumn("UrlDomain",        "STRING",    False, "Domain extracted from the URL"),
+        MdeColumn("UrlLocation",      "STRING",    True,  "Body | Attachment | Header — where in the message the URL appeared"),
+        MdeColumn("UrlChain",         "STRING[]",  True,  "Redirect chain if the URL redirects through intermediate URLs"),
+        MdeColumn("ReportId",         "STRING",    False, "Unique event identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "NetworkMessageId", "Url", "UrlDomain", "ReportId",
+    }),
+)
+
+_URL_CLICK_EVENTS = MdeTable(
+    name="UrlClickEvents",
+    description="MDO Safe Links click events — every URL click detonated through Safe Links rewriting",
+    columns=(
+        MdeColumn("Timestamp",         "TIMESTAMP", False, "Click event timestamp (UTC)"),
+        MdeColumn("Url",               "STRING",    False, "URL that was clicked (pre-rewrite original)"),
+        MdeColumn("ActionType",        "STRING",    False, "ClickAllowed | ClickBlocked | UrlErrorPage | UrlScanPending | ClickAllowedByTenantAdmin | ClickBlockedByTenantAdmin"),
+        MdeColumn("AccountUpn",        "STRING",    False, "UPN of the user who clicked the URL"),
+        MdeColumn("NetworkMessageId",  "STRING",    True,  "Message-ID if the URL came from an email — join to EmailEvents"),
+        MdeColumn("Workload",          "STRING",    True,  "Email | Teams | Office — surface where the URL was clicked"),
+        MdeColumn("IPAddress",         "STRING",    True,  "IP address from which the click originated"),
+        MdeColumn("IsClickedThrough",  "BOOLEAN",   False, "True if user clicked through a Safe Links warning page"),
+        MdeColumn("UrlChain",          "STRING[]",  True,  "Full redirect chain traversed at click time"),
+        MdeColumn("ThreatTypes",       "STRING[]",  True,  "Threat types associated with the URL at click time"),
+        MdeColumn("DetectionMethods",  "JSON",      True,  "Detection methods that flagged the URL"),
+        MdeColumn("ReportId",          "STRING",    False, "Unique event identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "Url", "ActionType", "AccountUpn", "ReportId",
+    }),
+)
+
+
+# ---------------------------------------------------------------------------
+# Identity tables — on-premises AD + Azure AD events and enrichment
+# ---------------------------------------------------------------------------
+
+_IDENTITY_DIRECTORY_EVENTS = MdeTable(
+    name="IdentityDirectoryEvents",
+    description="Active Directory and Azure AD directory change events — account/group modifications, privilege grants",
+    columns=(
+        MdeColumn("Timestamp",                "TIMESTAMP", False, "UTC event timestamp"),
+        MdeColumn("ActionType",               "STRING",    False, "AccountCreated | AccountDeleted | AccountModified | GroupModified | MemberAddedToGroup | MemberRemovedFromGroup | PasswordReset | PasswordChanged | SensitiveGroupModified | AdminPrivilegeGranted | AdminPrivilegeRemoved"),
+        MdeColumn("Application",              "STRING",    False, "Application or service that reported the event (e.g. Active Directory)"),
+        MdeColumn("TargetAccountUpn",         "STRING",    True,  "UPN of the account being modified"),
+        MdeColumn("TargetAccountDisplayName", "STRING",    True,  "Display name of the target account"),
+        MdeColumn("TargetDeviceName",         "STRING",    True,  "Target device if the action was on a computer object"),
+        MdeColumn("DestinationDeviceName",    "STRING",    True,  "Destination domain controller or target server"),
+        MdeColumn("DestinationIPAddress",     "STRING",    True,  "Destination IP address"),
+        MdeColumn("DestinationPort",          "INT",       True,  "Destination port"),
+        MdeColumn("Protocol",                 "STRING",    True,  "Protocol used: Kerberos | LDAP | NTLM | etc."),
+        MdeColumn("AccountUpn",               "STRING",    True,  "UPN of the account that initiated the change"),
+        MdeColumn("AccountSid",               "STRING",    True,  "SID of the initiating account"),
+        MdeColumn("AccountObjectId",          "STRING",    True,  "Azure AD object ID of the initiating account"),
+        MdeColumn("AccountDisplayName",       "STRING",    True,  "Display name of the initiating account"),
+        MdeColumn("AccountName",              "STRING",    True,  "sAMAccountName of the initiating account"),
+        MdeColumn("AccountDomain",            "STRING",    True,  "Domain of the initiating account"),
+        MdeColumn("DeviceName",               "STRING",    True,  "Source device hostname"),
+        MdeColumn("IPAddress",                "STRING",    True,  "Source IP address"),
+        MdeColumn("Port",                     "INT",       True,  "Source port"),
+        MdeColumn("Location",                 "STRING",    True,  "Geolocation string"),
+        MdeColumn("ISP",                      "STRING",    True,  "Internet service provider"),
+        MdeColumn("CountryCode",              "STRING",    True,  "ISO country code of source IP"),
+        MdeColumn("City",                     "STRING",    True,  "City of source IP"),
+        MdeColumn("AdditionalFields",         "JSON",      True,  "Event-specific details (changed attributes, group name, etc.)"),
+        MdeColumn("ReportId",                 "STRING",    False, "Unique event identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "ActionType", "Application", "ReportId",
+    }),
+)
+
+_IDENTITY_QUERY_EVENTS = MdeTable(
+    name="IdentityQueryEvents",
+    description="LDAP, SAMR, and DNS queries against identity infrastructure — key for recon and enumeration detection",
+    columns=(
+        MdeColumn("Timestamp",             "TIMESTAMP", False, "UTC event timestamp"),
+        MdeColumn("ActionType",            "STRING",    False, "LdapSearch | SamrObjectQuery | SamrListUsers | SamrListGroups | DnsQuery"),
+        MdeColumn("Application",           "STRING",    False, "Application that submitted the query"),
+        MdeColumn("QueryType",             "STRING",    False, "LDAP | DNS | SAMR — category of query"),
+        MdeColumn("QueryTarget",           "STRING",    False, "Query target: LDAP search base, DNS hostname, or SAMR object"),
+        MdeColumn("Protocol",              "STRING",    False, "LDAP | DNS | SAMR"),
+        MdeColumn("AccountUpn",            "STRING",    True,  "UPN of the querying account"),
+        MdeColumn("AccountSid",            "STRING",    True,  "SID of the querying account"),
+        MdeColumn("AccountObjectId",       "STRING",    True,  "Azure AD object ID of the querying account"),
+        MdeColumn("AccountDisplayName",    "STRING",    True,  "Display name of the querying account"),
+        MdeColumn("AccountName",           "STRING",    True,  "sAMAccountName of the querying account"),
+        MdeColumn("AccountDomain",         "STRING",    True,  "Domain of the querying account"),
+        MdeColumn("DeviceName",            "STRING",    True,  "Source device hostname"),
+        MdeColumn("IPAddress",             "STRING",    True,  "Source IP address"),
+        MdeColumn("Port",                  "INT",       True,  "Source port"),
+        MdeColumn("DestinationDeviceName", "STRING",    True,  "Target DC, DNS server, or domain"),
+        MdeColumn("DestinationIPAddress",  "STRING",    True,  "Target IP address"),
+        MdeColumn("DestinationPort",       "INT",       True,  "Target port"),
+        MdeColumn("AdditionalFields",      "JSON",      True,  "Query-specific detail: filter, scope, response size, etc."),
+        MdeColumn("ReportId",              "STRING",    False, "Unique event identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "ActionType", "QueryType", "QueryTarget", "ReportId",
+    }),
+)
+
+_IDENTITY_INFO = MdeTable(
+    name="IdentityInfo",
+    description="Identity attribute snapshot — HR data, MFA state, directory roles, and email aliases per account",
+    columns=(
+        MdeColumn("Timestamp",          "TIMESTAMP", False, "Last update timestamp for this identity record (UTC)"),
+        MdeColumn("AccountUpn",         "STRING",    False, "User principal name — primary identifier"),
+        MdeColumn("AccountObjectId",    "STRING",    False, "Azure AD object ID"),
+        MdeColumn("AccountDisplayName", "STRING",    False, "Display name from directory"),
+        MdeColumn("AccountDomain",      "STRING",    False, "Account domain"),
+        MdeColumn("AccountName",        "STRING",    False, "sAMAccountName"),
+        MdeColumn("AccountSid",         "STRING",    True,  "On-premises AD SID"),
+        MdeColumn("GivenName",          "STRING",    True,  "First name"),
+        MdeColumn("Surname",            "STRING",    True,  "Last name"),
+        MdeColumn("Department",         "STRING",    True,  "Department from directory"),
+        MdeColumn("JobTitle",           "STRING",    True,  "Job title"),
+        MdeColumn("OfficeLocation",     "STRING",    True,  "Office location string"),
+        MdeColumn("City",               "STRING",    True,  "City"),
+        MdeColumn("Country",            "STRING",    True,  "Country"),
+        MdeColumn("IsAccountEnabled",   "BOOLEAN",   False, "True if the account is enabled in the directory"),
+        MdeColumn("Manager",            "STRING",    True,  "UPN of the account manager"),
+        MdeColumn("Phone",              "STRING",    True,  "Phone number"),
+        MdeColumn("MFAEnabled",         "BOOLEAN",   True,  "True if MFA is enforced for this account"),
+        MdeColumn("AssignedRoles",      "STRING[]",  True,  "Azure AD directory roles assigned to the account"),
+        MdeColumn("EmailAddress",       "STRING",    True,  "Primary SMTP address"),
+        MdeColumn("ProxyAddresses",     "STRING[]",  True,  "All email aliases (proxy addresses)"),
+        MdeColumn("Tags",               "STRING[]",  True,  "Custom identity tags, e.g. HVA, Executive, ServiceAccount"),
+        MdeColumn("OnPremSid",          "STRING",    True,  "On-premises AD SID (explicit alias for AccountSid in hybrid environments)"),
+        MdeColumn("CloudSid",           "STRING",    True,  "Azure AD SID"),
+        MdeColumn("ReportId",           "STRING",    False, "Unique record identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "AccountUpn", "AccountObjectId", "IsAccountEnabled", "ReportId",
+    }),
+)
+
+_IDENTITY_ACCOUNT_INFO = MdeTable(
+    name="IdentityAccountInfo",
+    description="Account object snapshot — SIDs, license state, account type, and lifecycle attributes from Azure AD and on-prem AD",
+    columns=(
+        MdeColumn("Timestamp",          "TIMESTAMP", False, "Record update timestamp (UTC)"),
+        MdeColumn("AccountObjectId",    "STRING",    False, "Azure AD object ID — primary key for this table"),
+        MdeColumn("AccountUpn",         "STRING",    False, "User principal name"),
+        MdeColumn("AccountDisplayName", "STRING",    False, "Display name"),
+        MdeColumn("AccountDomain",      "STRING",    False, "Account domain"),
+        MdeColumn("AccountName",        "STRING",    False, "sAMAccountName"),
+        MdeColumn("AccountSid",         "STRING",    True,  "On-premises AD SID"),
+        MdeColumn("OnPremSid",          "STRING",    True,  "On-premises AD SID (canonical field name in hybrid environments)"),
+        MdeColumn("IsAccountEnabled",   "BOOLEAN",   False, "True if the account is enabled"),
+        MdeColumn("IsLicensed",         "BOOLEAN",   True,  "True if the account has at least one M365 license"),
+        MdeColumn("AssignedLicenses",   "STRING[]",  True,  "License SKU names assigned to the account"),
+        MdeColumn("Department",         "STRING",    True,  "Department"),
+        MdeColumn("JobTitle",           "STRING",    True,  "Job title"),
+        MdeColumn("Manager",            "STRING",    True,  "Manager UPN"),
+        MdeColumn("OfficeLocation",     "STRING",    True,  "Office location"),
+        MdeColumn("AccountType",        "STRING",    True,  "User | ServiceAccount | Computer | SharedMailbox | Guest"),
+        MdeColumn("AdditionalFields",   "JSON",      True,  "Additional account attributes not in core schema"),
+        MdeColumn("ReportId",           "STRING",    False, "Unique record identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "AccountObjectId", "AccountUpn", "IsAccountEnabled", "ReportId",
+    }),
+)
+
+_IDENTITY_EVENTS = MdeTable(
+    name="IdentityEvents",
+    description="General identity events — catch-all for identity-related actions not covered by DirectoryEvents or QueryEvents",
+    columns=(
+        MdeColumn("Timestamp",                "TIMESTAMP", False, "UTC event timestamp"),
+        MdeColumn("ActionType",               "STRING",    False, "Event type — varies by Application"),
+        MdeColumn("Application",              "STRING",    False, "Application or service that reported the event"),
+        MdeColumn("TargetAccountUpn",         "STRING",    True,  "UPN of the target account"),
+        MdeColumn("TargetAccountDisplayName", "STRING",    True,  "Display name of the target account"),
+        MdeColumn("AccountUpn",               "STRING",    True,  "UPN of the initiating account"),
+        MdeColumn("AccountSid",               "STRING",    True,  "SID of the initiating account"),
+        MdeColumn("AccountObjectId",          "STRING",    True,  "Azure AD object ID of the initiating account"),
+        MdeColumn("AccountDisplayName",       "STRING",    True,  "Display name of the initiating account"),
+        MdeColumn("AccountName",              "STRING",    True,  "sAMAccountName of the initiating account"),
+        MdeColumn("AccountDomain",            "STRING",    True,  "Domain of the initiating account"),
+        MdeColumn("DeviceName",               "STRING",    True,  "Source device hostname"),
+        MdeColumn("IPAddress",                "STRING",    True,  "Source IP address"),
+        MdeColumn("Port",                     "INT",       True,  "Source port"),
+        MdeColumn("DestinationDeviceName",    "STRING",    True,  "Target device hostname"),
+        MdeColumn("DestinationIPAddress",     "STRING",    True,  "Target IP address"),
+        MdeColumn("DestinationPort",          "INT",       True,  "Target port"),
+        MdeColumn("Protocol",                 "STRING",    True,  "Protocol used"),
+        MdeColumn("AdditionalFields",         "JSON",      True,  "Event-specific additional detail"),
+        MdeColumn("ReportId",                 "STRING",    False, "Unique event identifier"),
+    ),
+    required_for_ingest=frozenset({
+        "Timestamp", "ActionType", "Application", "ReportId",
+    }),
+)
+
+
+# ---------------------------------------------------------------------------
 # Registry — single source of truth for all table definitions
 # ---------------------------------------------------------------------------
 
 MDE_TABLES: dict[str, MdeTable] = {
     t.name: t
     for t in [
+        # Core MDE device telemetry
         _DEVICE_PROCESS_EVENTS,
         _DEVICE_NETWORK_EVENTS,
         _DEVICE_FILE_EVENTS,
@@ -637,8 +1066,26 @@ MDE_TABLES: dict[str, MdeTable] = {
         _DEVICE_LOGON_EVENTS,
         _DEVICE_EVENTS,
         _DEVICE_ALERT_EVENTS,
+        _DEVICE_IMAGE_LOAD_EVENTS,
+        _DEVICE_INFO,
+        _DEVICE_NETWORK_INFO,
+        _DEVICE_FILE_CERTIFICATE_INFO,
+        # MDO email tables
+        _EMAIL_EVENTS,
+        _EMAIL_ATTACHMENT_INFO,
+        _EMAIL_POST_DELIVERY_EVENTS,
+        _EMAIL_URL_INFO,
+        _URL_CLICK_EVENTS,
+        # Identity tables
         _IDENTITY_LOGON_EVENTS,
+        _IDENTITY_DIRECTORY_EVENTS,
+        _IDENTITY_QUERY_EVENTS,
+        _IDENTITY_INFO,
+        _IDENTITY_ACCOUNT_INFO,
+        _IDENTITY_EVENTS,
+        # Cloud application
         _CLOUD_APP_EVENTS,
+        # Third-party security data
         _AWS_CLOUDTRAIL_EVENTS,
         _CLOUDFLARE_HTTP_EVENTS,
         _CLOUDFLARE_FIREWALL_EVENTS,
@@ -659,6 +1106,60 @@ MDE_TABLES: dict[str, MdeTable] = {
 # ---------------------------------------------------------------------------
 
 ACTION_TYPES: dict[str, list[str]] = {
+    # Core device telemetry
+    "DeviceImageLoadEvents": [
+        "ImageLoaded",
+    ],
+    "DeviceInfo": [],           # Snapshot table — no ActionType enumeration
+    "DeviceNetworkInfo": [],    # Snapshot table — no ActionType enumeration
+    "DeviceFileCertificateInfo": [],  # Lookup table — no ActionType enumeration
+    # MDO email tables
+    "EmailEvents": [
+        "Delivered",
+        "Blocked",
+        "Replaced",
+        "Quarantined",
+    ],
+    "EmailAttachmentInfo": [],  # Metadata per attachment — no ActionType
+    "EmailPostDeliveryEvents": [
+        "ZAP",
+        "ManualRemediation",
+        "AdminActionRetroactivelyApplied",
+        "SystemTimeTravel",
+    ],
+    "EmailUrlInfo": [],         # URL metadata per message — no ActionType
+    "UrlClickEvents": [
+        "ClickAllowed",
+        "ClickBlocked",
+        "UrlErrorPage",
+        "UrlScanPending",
+        "ClickAllowedByTenantAdmin",
+        "ClickBlockedByTenantAdmin",
+    ],
+    # Identity tables
+    "IdentityDirectoryEvents": [
+        "AccountCreated",
+        "AccountDeleted",
+        "AccountModified",
+        "GroupModified",
+        "MemberAddedToGroup",
+        "MemberRemovedFromGroup",
+        "PasswordReset",
+        "PasswordChanged",
+        "SensitiveGroupModified",
+        "AdminPrivilegeGranted",
+        "AdminPrivilegeRemoved",
+    ],
+    "IdentityQueryEvents": [
+        "LdapSearch",
+        "SamrObjectQuery",
+        "SamrListUsers",
+        "SamrListGroups",
+        "DnsQuery",
+    ],
+    "IdentityInfo": [],         # Snapshot/enrichment table — no ActionType enumeration
+    "IdentityAccountInfo": [],  # Snapshot/enrichment table — no ActionType enumeration
+    "IdentityEvents": [],       # Freeform — ActionType varies by Application
     "DeviceProcessEvents": [
         "ProcessCreated",
         "ProcessInjected",
