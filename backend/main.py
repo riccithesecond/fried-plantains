@@ -111,22 +111,41 @@ async def request_logging_middleware(request: Request, call_next) -> Response:
 
 
 @app.middleware("http")
-async def csp_header_middleware(request: Request, call_next) -> Response:
-    """Inject Content-Security-Policy-Report-Only header.
+async def security_headers_middleware(request: Request, call_next) -> Response:
+    """Inject security headers on every response.
 
-    Report-only mode: violations are reported but not blocked. Switch to
-    Content-Security-Policy (enforcing) after validating no legitimate content
-    is blocked in your deployment.
+    CSP is in report-only mode: violations are logged, not blocked. Switch the
+    header name to Content-Security-Policy (drop -Report-Only) after confirming
+    no legitimate content is blocked in your deployment environment.
+
+    Monaco Editor requires 'unsafe-inline' for scripts and styles — document
+    this deviation so a future reviewer doesn't silently tighten it and break
+    the query editor.
     """
     response = await call_next(request)
+
+    # Report-only: observe before enforcing
     response.headers["Content-Security-Policy-Report-Only"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline'; "  # Monaco requires inline scripts
-        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; "  # Monaco Editor requires inline scripts
+        "style-src 'self' 'unsafe-inline'; "   # Monaco Editor requires inline styles
         "img-src 'self' data:; "
         "font-src 'self'; "
         "connect-src 'self'"
     )
+
+    # Prevent MIME-type sniffing — browser must honour Content-Type as declared
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    # Deny framing entirely — no clickjacking surface on an analyst tool
+    response.headers["X-Frame-Options"] = "DENY"
+
+    # Limit referrer to origin only on cross-origin requests
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    # Disable browser features that have no purpose in a SIEM dashboard
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+
     return response
 
 

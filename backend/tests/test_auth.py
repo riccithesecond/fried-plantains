@@ -98,3 +98,39 @@ class TestHealthEndpoint:
         resp = client.get("/api/v1/health")
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
+
+
+class TestSecurityHeaders:
+    """Verify security headers are present on every response.
+
+    Uses the public /health endpoint so no auth token is needed. Headers
+    are injected by middleware and must appear regardless of route.
+    """
+
+    def _get(self, client):
+        return client.get("/api/v1/health")
+
+    def test_csp_report_only_present(self, client):
+        resp = self._get(client)
+        assert "content-security-policy-report-only" in resp.headers
+
+    def test_csp_contains_default_src_self(self, client):
+        resp = self._get(client)
+        csp = resp.headers["content-security-policy-report-only"]
+        assert "default-src 'self'" in csp
+
+    def test_x_content_type_options_nosniff(self, client):
+        resp = self._get(client)
+        assert resp.headers.get("x-content-type-options") == "nosniff"
+
+    def test_x_frame_options_deny(self, client):
+        resp = self._get(client)
+        assert resp.headers.get("x-frame-options") == "DENY"
+
+    def test_referrer_policy_set(self, client):
+        resp = self._get(client)
+        assert resp.headers.get("referrer-policy") == "strict-origin-when-cross-origin"
+
+    def test_permissions_policy_set(self, client):
+        resp = self._get(client)
+        assert "permissions-policy" in resp.headers
